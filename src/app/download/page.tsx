@@ -1,8 +1,8 @@
 "use client";
 
-// ClipMiner Web — 콘텐츠 수집 안내 / 연결 상태.
-// Douyin/Xiaohongshu 수집은 Web 버튼이 아니라 **브라우저 확장(ClipMiner Connector)** 에서 실행한다.
-// 이 화면은 안내 + 작업 폴더 연결 + 확장 연결 상태만 담당한다.
+// ClipMiner Web — 콘텐츠 수집 "테스트 런처" + 연결 상태.
+// 수집(다운로드)은 Web 버튼이 아니라 **브라우저 확장(ClipMiner Connector)** 에서 실행한다.
+// 이 화면은 Douyin 페이지 열기·라이브러리 열기·작업 폴더/확장 상태만 담당한다(직접 다운로드 버튼 없음).
 // (cookies.txt 수동 업로드 / 서버 yt-dlp 다운로드 방식은 미채택 — 제거됨)
 
 import Link from "next/link";
@@ -14,6 +14,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ArrowRight,
+  ExternalLink,
+  RotateCw,
 } from "lucide-react";
 import BackButton from "@/components/BackButton";
 import {
@@ -30,6 +32,25 @@ export default function CollectPage() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [perm, setPerm] = useState<PermissionState | null>(null);
   const [extReady, setExtReady] = useState(false);
+  const [douyinUrl, setDouyinUrl] = useState("");
+
+  function isDouyinUrl(raw: string): boolean {
+    try {
+      const h = new URL(raw).hostname.replace(/^www\./, "").toLowerCase();
+      return h.endsWith("douyin.com") || h.endsWith("iesdouyin.com");
+    } catch {
+      return false;
+    }
+  }
+  function openDouyin() {
+    const u = douyinUrl.trim();
+    if (!u) return;
+    const url = /^https?:\/\//i.test(u) ? u : `https://${u}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+  function openLibrary() {
+    window.open("/videos", "_blank", "noopener");
+  }
 
   useEffect(() => {
     let active = true;
@@ -99,20 +120,71 @@ export default function CollectPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold tracking-tight">콘텐츠 수집</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">콘텐츠 수집 — 테스트</h1>
         <p className="mt-2 text-base text-text">
           Douyin 영상 페이지에서 ClipMiner 확장 아이콘을 눌러 수집하세요.
         </p>
         <p className="mt-1 text-sm text-subtext">
-          다운로드 성공 후 이 라이브러리에 자동 등록됩니다.
+          다운로드 성공 후 라이브러리에 자동 등록됩니다. (다운로드 실행은 확장에서 — Web에 다운로드 버튼 없음)
         </p>
 
-        {/* 단계 안내 */}
-        <ol className="mt-6 space-y-2 text-sm text-subtext">
-          <li>1. 아래 <b className="text-text">작업 폴더</b>를 연결합니다(영상이 저장될 위치).</li>
-          <li>2. <b className="text-text">ClipMiner Connector 확장</b>을 설치/활성화합니다.</li>
-          <li>3. Douyin 영상 페이지에서 확장으로 수집 → 성공 시 이 라이브러리에 자동 등록.</li>
+        {/* 테스트 순서 */}
+        <ol className="mt-6 space-y-1.5 text-sm text-subtext">
+          <li>1. <b className="text-text">작업 폴더</b> 연결 (영상 저장 위치)</li>
+          <li>2. <b className="text-text">라이브러리(/videos)</b> 탭 열어두기 (자동 등록 수신)</li>
+          <li>3. 아래에 <b className="text-text">Douyin URL</b> 입력 → <b className="text-text">Douyin 열기</b></li>
+          <li>4. 열린 Douyin 페이지에서 <b className="text-text">ClipMiner 확장 아이콘(패널) 클릭</b></li>
+          <li>5. 성공 시 라이브러리에 <b className="text-text">자동 등록</b></li>
         </ol>
+
+        {/* Douyin 테스트 런처 */}
+        <div className="mt-6 rounded-card border border-border bg-card p-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-subtext">
+            Douyin 테스트
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={douyinUrl}
+              onChange={(e) => setDouyinUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") openDouyin();
+              }}
+              placeholder="https://www.douyin.com/video/..."
+              className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text placeholder:text-subtext focus:border-primary/60 focus:outline-none"
+            />
+            <button
+              onClick={openDouyin}
+              disabled={!douyinUrl.trim()}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <ExternalLink size={15} /> Douyin 열기
+            </button>
+          </div>
+          {douyinUrl.trim() !== "" && !isDouyinUrl(douyinUrl) && (
+            <p className="mt-1.5 text-xs text-amber-400">
+              Douyin URL이 아닌 것 같습니다. (그래도 열기는 가능)
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={openLibrary}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-sm text-subtext transition-colors hover:border-primary/50 hover:text-text"
+            >
+              <Film size={14} /> 라이브러리 열기
+            </button>
+            <button
+              onClick={() => location.reload()}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
+              title="확장을 새로 로드/업데이트했다면 이 페이지와 /videos 탭을 새로고침하세요"
+            >
+              <RotateCw size={14} /> 확장 새로고침 안내 (페이지 새로고침)
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-subtext/60">
+            확장을 새로 로드/업데이트했다면 <b>이 페이지와 /videos 탭을 새로고침</b>해야 확장이 다시
+            주입됩니다. (브리지 연결 오류 시 새로고침)
+          </p>
+        </div>
 
         {/* 작업 폴더 연결 상태 */}
         <div className="mt-6">
