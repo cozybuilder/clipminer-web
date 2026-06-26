@@ -4,7 +4,7 @@
 // 외부 DB / 서버 저장소 / 인증 없음.
 
 import Dexie, { type EntityTable } from "dexie";
-import type { TagItem, VideoItem } from "./types";
+import type { SettingRow, TagItem, VideoItem } from "./types";
 import { detectPlatform } from "./platform";
 
 const DB_NAME = "clipminer";
@@ -18,6 +18,7 @@ const DB_NAME = "clipminer";
 export const db = new Dexie(DB_NAME) as Dexie & {
   videos: EntityTable<VideoItem, "id">;
   tags: EntityTable<TagItem, "name">;
+  settings: EntityTable<SettingRow, "key">;
 };
 
 // 스키마 v1
@@ -69,4 +70,13 @@ db.version(3)
 db.version(4).stores({
   videos: "id, status, platform, updatedAt, createdAt, *tags",
   tags: "name, createdAt",
+});
+
+// 스키마 v5
+// - settings 스토어 추가(key PK). 작업 폴더 디렉터리 핸들 등 앱 설정 보관.
+//   디렉터리 핸들은 구조화 복제로 영속되며, 파일 본체는 저장하지 않는다.
+db.version(5).stores({
+  videos: "id, status, platform, updatedAt, createdAt, *tags",
+  tags: "name, createdAt",
+  settings: "key",
 });

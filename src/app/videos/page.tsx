@@ -30,6 +30,9 @@ import {
   FileVideo,
   Upload,
   RotateCw,
+  Folder,
+  FolderOpen,
+  FolderX,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -54,6 +57,15 @@ import {
   PLATFORM_LABELS,
   type Platform,
 } from "@/lib/platform";
+import {
+  isFsAccessSupported,
+  pickWorkspace,
+  getStoredWorkspace,
+  clearWorkspace,
+  queryWorkspacePermission,
+  requestWorkspacePermission,
+  type Workspace,
+} from "@/lib/workspace";
 
 type StatusFilter = "all" | VideoStatus | "favorite";
 type SortKey = "updated" | "created" | "title";
@@ -171,6 +183,13 @@ export default function VideoLibraryPage() {
     });
   }
 
+  // 작업 폴더 (File System Access)
+  const [fsSupported, setFsSupported] = useState(false);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspacePerm, setWorkspacePerm] = useState<PermissionState | null>(
+    null,
+  );
+
   async function refresh() {
     setVideos(await listVideos());
   }
@@ -179,15 +198,43 @@ export default function VideoLibraryPage() {
     let active = true;
     (async () => {
       const items = await listVideos();
+      const supported = isFsAccessSupported();
+      const ws = supported ? await getStoredWorkspace() : null;
+      const perm = ws ? await queryWorkspacePermission(ws.handle) : null;
       if (active) {
         setVideos(items);
         setLoading(false);
+        setFsSupported(supported);
+        setWorkspace(ws);
+        setWorkspacePerm(perm);
       }
     })();
     return () => {
       active = false;
     };
   }, []);
+
+  async function handlePickWorkspace() {
+    try {
+      const ws = await pickWorkspace();
+      if (ws) {
+        setWorkspace(ws);
+        setWorkspacePerm(await queryWorkspacePermission(ws.handle));
+      }
+    } catch {
+      // 사용자가 선택 취소 — 무시
+    }
+  }
+  async function handleReauthWorkspace() {
+    if (!workspace) return;
+    const perm = await requestWorkspacePermission(workspace.handle);
+    setWorkspacePerm(perm);
+  }
+  async function handleClearWorkspace() {
+    await clearWorkspace();
+    setWorkspace(null);
+    setWorkspacePerm(null);
+  }
 
   // 필터/검색이 바뀌면 선택 초기화
   function changeStatusFilter(f: StatusFilter) {
@@ -402,6 +449,16 @@ export default function VideoLibraryPage() {
 
       {/* ───────── 메인 ───────── */}
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-6 py-6">
+        {/* 작업 폴더 (File System Access) */}
+        <WorkspaceBar
+          supported={fsSupported}
+          workspace={workspace}
+          permission={workspacePerm}
+          onPick={handlePickWorkspace}
+          onReauth={handleReauthWorkspace}
+          onClear={handleClearWorkspace}
+        />
+
         {/* StatCard 필터 */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {stats.map((s) => (
@@ -458,17 +515,15 @@ export default function VideoLibraryPage() {
             )}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {results.length > 0 && (
-              <button
-                onClick={toggleSelectAll}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
-              >
-                <CheckSquare size={14} />
-                {allSelected ? "선택 해제" : "전체 선택"}
-              </button>
-            )}
+            {/* 순서: 선택 삭제(맨왼쪽) → 제작완료 → 즐겨찾기 추가 → 즐겨찾기 해제 → 선택 해제/전체 선택(맨오른쪽) */}
             {selected.size > 0 && (
               <>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/25"
+                >
+                  <Trash2 size={14} /> 선택 삭제 ({selected.size})
+                </button>
                 <button
                   onClick={handleBulkProduced}
                   className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/20"
@@ -487,13 +542,16 @@ export default function VideoLibraryPage() {
                 >
                   <StarOff size={14} /> 즐겨찾기 해제
                 </button>
-                <button
-                  onClick={handleBulkDelete}
-                  className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/25"
-                >
-                  <Trash2 size={14} /> 선택 삭제 ({selected.size})
-                </button>
               </>
+            )}
+            {results.length > 0 && (
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
+              >
+                <CheckSquare size={14} />
+                {allSelected ? "선택 해제" : "전체 선택"}
+              </button>
             )}
           </div>
         </div>
@@ -556,6 +614,100 @@ export default function VideoLibraryPage() {
           onDelete={handleDelete}
         />
       )}
+    </div>
+  );
+}
+
+// ───────── 작업 폴더 바 ─────────
+function WorkspaceBar({
+  supported,
+  workspace,
+  permission,
+  onPick,
+  onReauth,
+  onClear,
+}: {
+  supported: boolean;
+  workspace: Workspace | null;
+  permission: PermissionState | null;
+  onPick: () => void;
+  onReauth: () => void;
+  onClear: () => void;
+}) {
+  // 미지원 브라우저 안내
+  if (!supported) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-card border border-border bg-card px-4 py-3 text-sm text-subtext">
+        <FolderX size={16} className="shrink-0" />
+        <span>
+          이 브라우저는 작업 폴더 연결(File System Access)을 지원하지 않습니다.
+          Chrome·Edge 등 데스크톱 브라우저에서 사용하세요. (로컬 파일 첨부는 계속 사용 가능)
+        </span>
+      </div>
+    );
+  }
+
+  // 폴더 미선택
+  if (!workspace) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-card px-4 py-3">
+        <div className="flex items-center gap-2.5 text-sm text-subtext">
+          <Folder size={16} className="shrink-0" />
+          <span>작업 폴더를 선택하면 영상 파일을 폴더 기준으로 관리할 수 있습니다.</span>
+        </div>
+        <button
+          onClick={onPick}
+          className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+        >
+          <FolderOpen size={15} /> 작업 폴더 선택
+        </button>
+      </div>
+    );
+  }
+
+  const granted = permission === "granted";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-2.5 text-sm">
+        <FolderOpen
+          size={16}
+          className={granted ? "text-primary" : "text-amber-400"}
+        />
+        <span className="text-subtext">작업 폴더</span>
+        <span className="font-medium text-text">{workspace.name}</span>
+        {granted ? (
+          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
+            연결됨
+          </span>
+        ) : (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+            권한 필요
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {!granted && (
+          <button
+            onClick={onReauth}
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+          >
+            <RotateCw size={14} /> 권한 다시 허용
+          </button>
+        )}
+        <button
+          onClick={onPick}
+          className="rounded-xl border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
+        >
+          변경
+        </button>
+        <button
+          onClick={onClear}
+          className="rounded-xl border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-red-500/40 hover:text-red-400"
+        >
+          해제
+        </button>
+      </div>
     </div>
   );
 }

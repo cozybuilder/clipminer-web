@@ -1,17 +1,17 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 5 로컬 파일 첨부 MVP)
+> 최종 갱신: 2026-06-27 (Phase 6 작업 폴더(File System Access) MVP)
 
 ---
 
 ## 현재 단계
 
-**Phase 5 — 로컬 영상 파일 첨부(Local File Attachment) MVP 완료.**
-영상 추가 모달에서 로컬 mp4/webm/mov 선택 → 현재 세션 메모리(ObjectURL)로 카드/상세에서 재생.
-파일 본체는 서버/IndexedDB에 저장하지 않고 **메타데이터(이름/형식/크기)만** 저장.
-**스키마 v4**: `localFileName/localFileType/localFileSize` 추가. 새로고침 시 파일 재연결 안내.
+**Phase 6 — 작업 폴더(File System Access) MVP 완료.**
+사용자가 작업 폴더를 선택하면 디렉터리 핸들을 IndexedDB(settings, schema v5)에 영속 저장하고,
+로드 시 권한을 재확인해 폴더명/연결 상태를 표시한다. 미지원 브라우저·권한 필요 상태는 안내한다.
+일괄작업 바 버튼 순서 정리(6-B): 선택 삭제 → 제작완료 → 즐겨찾기 추가/해제 → 선택 해제.
 
-다음: 로컬 폴더 권한 영속(File System Access) 등은 이후 검토.
+다음: 작업 폴더 기준 파일 자동 매칭/재연결 등은 이후 검토.
 
 > **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
 > 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
@@ -136,10 +136,20 @@
 - [x] 검증: `npm run lint` / `npm run build` 통과
 - 카드 hover 무음 재생은 현재 세션 ObjectURL 기준으로 구현(Desktop hover 재생과 동일 개념)
 
+### Phase 6 — 작업 폴더 (File System Access) MVP (2026-06-27)
+- [x] `src/lib/workspace.ts`: 지원 감지 / 폴더 선택 / 핸들 저장 / 권한 조회·요청 / 해제
+- [x] 스키마 v5: `settings` 스토어(key PK) 추가 — 작업 폴더 디렉터리 핸들 영속(구조화 복제)
+- [x] /videos 상단 작업 폴더 바: 선택 / 폴더명·연결됨 표시 / 권한 필요 시 "권한 다시 허용" / 변경 / 해제
+- [x] 미지원 브라우저 안내 분기 (로컬 파일 첨부는 계속 사용 가능)
+- [x] 파일 본체/Blob 미저장 — 디렉터리 핸들 + 권한만 보관
+- [x] (6-B) 일괄작업 바 순서 정리: 선택 삭제 → 제작완료 → 즐겨찾기 추가 → 즐겨찾기 해제 → 선택 해제
+- [x] 사장 수동 테스트: 작업 폴더 선택 / mp4 첨부 / 카드 표시 / 전체선택 / 버튼 배치 확인
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
 ## 미완료 (이후 단계)
 
-### Phase 6 — 파일 영속 / 편집
-- [ ] File System Access API 디렉토리 권한 영속(새로고침 후 자동 재연결) 검토
+### Phase 7 — 파일 자동 매칭 / 편집
+- [ ] 작업 폴더 기준 영상 파일 자동 매칭/재연결(새로고침 후 자동 복원) 검토
 - [ ] 영상 편집(제목/URL/태그) UI (현재는 상태/메모/즐겨찾기/파일연결)
 
 ### 이후 (선택적)

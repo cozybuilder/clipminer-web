@@ -58,6 +58,17 @@ export interface TagItem {
   createdAt: number;
 }
 
+/**
+ * 설정 스토어 레코드 (key가 primary key, schema v5).
+ * 작업 폴더 디렉터리 핸들 등 앱 설정을 보관한다.
+ * (FileSystemDirectoryHandle은 구조화 복제로 IndexedDB에 영속 가능)
+ */
+export interface SettingRow {
+  key: string;
+  handle?: unknown;
+  name?: string;
+}
+
 /** 영상 생성 입력 (id/타임스탬프는 데이터 계층에서 생성) */
 export type NewVideoInput = Pick<
   VideoItem,
