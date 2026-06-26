@@ -28,6 +28,9 @@ export async function addVideo(input: NewVideoInput): Promise<VideoItem> {
     note: input.note,
     status: input.status,
     isFavorite: false,
+    localFileName: input.localFileName,
+    localFileType: input.localFileType,
+    localFileSize: input.localFileSize,
     createdAt: now,
     updatedAt: now,
   };

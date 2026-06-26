@@ -1,17 +1,17 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 4-E 즐겨찾기 + 다중선택 + 일괄작업)
+> 최종 갱신: 2026-06-27 (Phase 5 로컬 파일 첨부 MVP)
 
 ---
 
 ## 현재 단계
 
-**Phase 4-E — 즐겨찾기 / 다중선택 / 일괄작업 이식 완료.**
-카드 즐겨찾기(별) 토글 + 상세 모달 토글, StatCard에 "즐겨찾기(미제작)" 추가,
-카드 다중선택(체크박스) + 상단 일괄작업 바(제작완료/즐겨찾기 추가·해제/선택 삭제/선택 해제).
-**스키마 v3**: `isFavorite` 필드 추가 + Dexie migration(기존 레코드 false 백필).
+**Phase 5 — 로컬 영상 파일 첨부(Local File Attachment) MVP 완료.**
+영상 추가 모달에서 로컬 mp4/webm/mov 선택 → 현재 세션 메모리(ObjectURL)로 카드/상세에서 재생.
+파일 본체는 서버/IndexedDB에 저장하지 않고 **메타데이터(이름/형식/크기)만** 저장.
+**스키마 v4**: `localFileName/localFileType/localFileSize` 추가. 새로고침 시 파일 재연결 안내.
 
-실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
+다음: 로컬 폴더 권한 영속(File System Access) 등은 이후 검토.
 
 > **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
 > 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
@@ -126,12 +126,21 @@
 - [x] 수동 검증: 즐겨찾기 토글·StatCard 카운트·다중선택·선택해제·일괄 제작완료·즐겨찾기 추가/해제·선택 삭제·새로고침 유지
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
+### Phase 5 — 로컬 파일 첨부 MVP (2026-06-27)
+- [x] 스키마 v4: `localFileName/localFileType/localFileSize` 추가 (선택적 비인덱스 필드, db.version(4) 표식)
+- [x] 영상 추가 모달: 로컬 영상 파일 선택(`accept="video/*"`) + 미리보기 video + 파일명→제목 자동
+- [x] 현재 세션 재생: File→ObjectURL을 메모리(`fileUrls`)로 보관, 카드 썸네일 영역 video(hover 무음 재생)
+- [x] 상세 모달: 로컬 파일 정보 표시 + 세션 내 video 재생 + 새로고침 후 "다시 연결" 안내/입력
+- [x] 파일 본체/Blob은 서버·IndexedDB에 저장하지 않음 (메타데이터만)
+- [x] 수동 검증: mp4 첨부/카드·상세 video/새로고침 후 메타 유지·재연결 안내/재연결/URL-only 카드 정상/상태·즐겨찾기·일괄 회귀 없음
+- [x] 검증: `npm run lint` / `npm run build` 통과
+- 카드 hover 무음 재생은 현재 세션 ObjectURL 기준으로 구현(Desktop hover 재생과 동일 개념)
+
 ## 미완료 (이후 단계)
 
-### Phase 5 — 영상 파일 / 데이터 이동
-- [ ] 로컬 폴더 지정 + 실제 영상 파일 저장/참조 (File System Access API 등)
-- [ ] 카드 hover 시 로컬 영상 미리보기(Desktop의 hover 재생) — 파일 저장 이후
-- [ ] 영상 편집(수정) UI (현재는 상태 변경 + 삭제만)
+### Phase 6 — 파일 영속 / 편집
+- [ ] File System Access API 디렉토리 권한 영속(새로고침 후 자동 재연결) 검토
+- [ ] 영상 편집(제목/URL/태그) UI (현재는 상태/메모/즐겨찾기/파일연결)
 
 ### 이후 (선택적)
 - [ ] JSON Import/Export (백업 파일)

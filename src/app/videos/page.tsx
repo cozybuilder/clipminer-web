@@ -1,12 +1,12 @@
 "use client";
 
 // ClipMiner Web — Video Library.
-// ClipMiner Desktop(v0.1.1) 사용감 재현: 헤더 + StatCard 필터(즐겨찾기 포함) + 태그 필터 라인 +
-// 다중선택/일괄작업 + 9:16 쇼츠 카드 그리드 + 추가/상세 모달.
-// 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장/다운로드는 범위 밖.
+// ClipMiner Desktop(v0.1.1) 사용감 재현. Local-First: 데이터는 IndexedDB(Dexie).
+// 로컬 영상 파일은 서버/IndexedDB에 저장하지 않는다. File 객체는 현재 세션 메모리에만 보관하고,
+// 파일 메타데이터(이름/형식/크기)만 IndexedDB에 저장한다. 새로고침 시 파일은 재연결 필요.
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Film,
   Search,
@@ -27,6 +27,9 @@ import {
   Star,
   StarOff,
   CheckSquare,
+  FileVideo,
+  Upload,
+  RotateCw,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -78,6 +81,22 @@ function formatDate(ms: number): string {
   });
 }
 
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/");
+}
+
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -101,13 +120,7 @@ function PlatformBadge({ platform }: { platform: Platform }) {
   );
 }
 
-function CopyButton({
-  text,
-  label,
-}: {
-  text: string;
-  label?: string;
-}) {
+function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   if (!text) return null;
   return (
@@ -139,6 +152,25 @@ export default function VideoLibraryPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // 현재 세션의 로컬 파일 ObjectURL (id → blob: URL). 새로고침 시 사라짐(의도).
+  const [fileUrls, setFileUrls] = useState<Record<string, string>>({});
+
+  function registerFile(id: string, file: File) {
+    const url = URL.createObjectURL(file);
+    setFileUrls((prev) => {
+      if (prev[id]) URL.revokeObjectURL(prev[id]);
+      return { ...prev, [id]: url };
+    });
+  }
+  function forgetFile(id: string) {
+    setFileUrls((prev) => {
+      if (prev[id]) URL.revokeObjectURL(prev[id]);
+      const { [id]: _omit, ...rest } = prev;
+      void _omit;
+      return rest;
+    });
+  }
+
   async function refresh() {
     setVideos(await listVideos());
   }
@@ -157,7 +189,7 @@ export default function VideoLibraryPage() {
     };
   }, []);
 
-  // 필터/검색이 바뀌면 선택 초기화 (보이지 않는 항목이 선택된 채 남지 않도록)
+  // 필터/검색이 바뀌면 선택 초기화
   function changeStatusFilter(f: StatusFilter) {
     setStatusFilter(f);
     setSelected(new Set());
@@ -174,6 +206,7 @@ export default function VideoLibraryPage() {
   async function handleDelete(id: string) {
     if (!window.confirm("이 영상을 삭제하시겠습니까?")) return;
     await deleteVideo(id);
+    forgetFile(id);
     if (detailId === id) setDetailId(null);
     await refresh();
   }
@@ -190,6 +223,17 @@ export default function VideoLibraryPage() {
 
   async function handleToggleFavorite(id: string, value: boolean) {
     await setFavorite(id, value);
+    await refresh();
+  }
+
+  // 로컬 파일 (재)연결: 세션 ObjectURL 등록 + 메타데이터 갱신
+  async function handleAttachFile(id: string, file: File) {
+    registerFile(id, file);
+    await updateVideo(id, {
+      localFileName: file.name,
+      localFileType: file.type,
+      localFileSize: file.size,
+    });
     await refresh();
   }
 
@@ -270,7 +314,9 @@ export default function VideoLibraryPage() {
     if (selected.size === 0) return;
     if (!window.confirm(`선택한 영상 ${selected.size}개를 삭제하시겠습니까?`))
       return;
-    await bulkDelete([...selected]);
+    const ids = [...selected];
+    await bulkDelete(ids);
+    ids.forEach(forgetFile);
     setSelected(new Set());
     await refresh();
   }
@@ -474,6 +520,7 @@ export default function VideoLibraryPage() {
               <VideoCard
                 key={v.id}
                 video={v}
+                fileUrl={fileUrls[v.id]}
                 selected={selected.has(v.id)}
                 onToggleSelect={toggleSelect}
                 onToggleFavorite={handleToggleFavorite}
@@ -489,8 +536,9 @@ export default function VideoLibraryPage() {
       {adding && (
         <AddVideoModal
           onClose={() => setAdding(false)}
-          onSaved={async () => {
+          onSaved={async (id, file) => {
             setAdding(false);
+            if (file) registerFile(id, file);
             await refresh();
           }}
         />
@@ -499,10 +547,12 @@ export default function VideoLibraryPage() {
       {detailVideo && (
         <DetailModal
           video={detailVideo}
+          fileUrl={fileUrls[detailVideo.id]}
           onClose={() => setDetailId(null)}
           onStatusChange={handleStatusChange}
           onMemoSave={handleMemoSave}
           onToggleFavorite={handleToggleFavorite}
+          onAttachFile={handleAttachFile}
           onDelete={handleDelete}
         />
       )}
@@ -510,7 +560,7 @@ export default function VideoLibraryPage() {
   );
 }
 
-// ───────── StatCard (Desktop 원본 구조) ─────────
+// ───────── StatCard ─────────
 function StatCard({
   label,
   value,
@@ -546,9 +596,10 @@ function StatCard({
   );
 }
 
-// ───────── 영상 카드 (9:16 쇼츠형, 클릭 시 상세) ─────────
+// ───────── 영상 카드 ─────────
 function VideoCard({
   video,
+  fileUrl,
   selected,
   onToggleSelect,
   onToggleFavorite,
@@ -557,6 +608,7 @@ function VideoCard({
   onTagClick,
 }: {
   video: VideoItem;
+  fileUrl?: string;
   selected: boolean;
   onToggleSelect: (id: string) => void;
   onToggleFavorite: (id: string, value: boolean) => void;
@@ -566,6 +618,7 @@ function VideoCard({
 }) {
   const thumb = getThumbnail(video.url);
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const needsRelink = !fileUrl && !!video.localFileName;
 
   return (
     <div
@@ -576,9 +629,25 @@ function VideoCard({
           : "border-border hover:border-primary/50"
       }`}
     >
-      {/* 썸네일 (카드 중심) */}
+      {/* 썸네일 / 로컬 영상 */}
       <div className="relative aspect-[9/16] overflow-hidden bg-border">
-        {thumb ? (
+        {fileUrl ? (
+          <video
+            src={fileUrl}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            onMouseEnter={(e) => {
+              void e.currentTarget.play().catch(() => {});
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.pause();
+              e.currentTarget.currentTime = 0;
+            }}
+            className="h-full w-full object-cover"
+          />
+        ) : thumb ? (
           // 외부 썸네일 — next/image 대신 일반 img (도메인 비고정)
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -586,6 +655,12 @@ function VideoCard({
             alt={video.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
+        ) : needsRelink ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-2 text-center text-subtext/50">
+            <FileVideo size={26} />
+            <span className="text-xs">로컬 파일</span>
+            <span className="text-[10px] leading-tight">재연결 필요</span>
+          </div>
         ) : (
           <ThumbPlaceholder />
         )}
@@ -621,9 +696,17 @@ function VideoCard({
           />
         </button>
 
-        {/* 플랫폼 배지 (좌하단) */}
-        <div className="absolute bottom-2 left-2">
+        {/* 좌하단: 플랫폼 배지 + 로컬 파일 표시 */}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1">
           <PlatformBadge platform={video.platform} />
+          {video.localFileName && (
+            <span
+              className="flex items-center rounded-full border border-border bg-black/50 p-1 text-white/80"
+              title={fileUrl ? "로컬 영상 연결됨" : "로컬 파일 (재연결 필요)"}
+            >
+              <FileVideo size={11} />
+            </span>
+          )}
         </div>
 
         {/* 상태 배지 (우하단) */}
@@ -663,7 +746,6 @@ function VideoCard({
           </p>
         )}
 
-        {/* 상태 빠른 변경 + URL 복사 + 날짜 */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">
           <select
             value={video.status}
@@ -702,25 +784,30 @@ function ThumbPlaceholder() {
   );
 }
 
-// ───────── 상세 모달 (Desktop VideoDetail 흐름 이식) ─────────
+// ───────── 상세 모달 ─────────
 function DetailModal({
   video,
+  fileUrl,
   onClose,
   onStatusChange,
   onMemoSave,
   onToggleFavorite,
+  onAttachFile,
   onDelete,
 }: {
   video: VideoItem;
+  fileUrl?: string;
   onClose: () => void;
   onStatusChange: (id: string, s: VideoStatus) => void;
   onMemoSave: (id: string, note: string) => void;
   onToggleFavorite: (id: string, value: boolean) => void;
+  onAttachFile: (id: string, file: File) => void;
   onDelete: (id: string) => void;
 }) {
   const thumb = getThumbnail(video.url);
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState(video.note);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function startEdit() {
     setMemoDraft(video.note);
@@ -730,6 +817,18 @@ function DetailModal({
     await onMemoSave(video.id, memoDraft.trim());
     setMemoEditing(false);
   }
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!isVideoFile(file)) {
+      window.alert("영상 파일(mp4/webm/mov 등)만 첨부할 수 있습니다.");
+      return;
+    }
+    onAttachFile(video.id, file);
+  }
+
+  const needsRelink = !fileUrl && !!video.localFileName;
 
   return (
     <div
@@ -772,9 +871,16 @@ function DetailModal({
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 md:grid-cols-[260px_1fr]">
-          {/* 썸네일 */}
+          {/* 미리보기 영역 */}
           <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-card border border-border bg-border">
-            {thumb ? (
+            {fileUrl ? (
+              <video
+                src={fileUrl}
+                controls
+                playsInline
+                className="h-full w-full object-contain"
+              />
+            ) : thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={thumb}
@@ -792,7 +898,6 @@ function DetailModal({
               {video.title || "(제목 없음)"}
             </h1>
 
-            {/* 등록일 */}
             <InfoRow icon={<Calendar size={15} />} label="등록일">
               <span className="text-sm text-text">
                 {formatDate(video.createdAt)}
@@ -823,6 +928,54 @@ function DetailModal({
               <p className="break-all font-mono text-sm leading-relaxed text-text">
                 {video.url || "URL 없음"}
               </p>
+            </div>
+
+            {/* 로컬 영상 */}
+            <div className="rounded-card border border-border bg-background p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <FileVideo size={14} className="text-subtext" />
+                <p className="text-xs text-subtext">로컬 영상</p>
+              </div>
+
+              {video.localFileName ? (
+                <div className="space-y-2">
+                  <p className="break-all font-mono text-sm text-text">
+                    {video.localFileName}
+                  </p>
+                  <p className="text-xs text-subtext">
+                    {video.localFileType || "video"}
+                    {video.localFileSize
+                      ? ` · ${formatFileSize(video.localFileSize)}`
+                      : ""}
+                  </p>
+                  {fileUrl ? (
+                    <p className="text-xs text-accent">
+                      현재 세션에서 재생 중 — 위 미리보기에서 재생할 수 있습니다.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-400">
+                      이 브라우저 세션에 파일 객체가 없습니다. 로컬 파일을 다시 연결하세요.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-subtext/50">연결된 로컬 파일 없음</p>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={onPickFile}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-3 flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
+              >
+                {needsRelink ? <RotateCw size={12} /> : <Upload size={12} />}
+                {video.localFileName ? "다시 연결" : "로컬 파일 연결"}
+              </button>
             </div>
 
             {/* 태그 */}
@@ -960,28 +1113,60 @@ function AddVideoModal({
   onSaved,
 }: {
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (id: string, file: File | null) => void;
 }) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<VideoStatus>("idea");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const platform = detectPlatform(url.trim());
 
+  // 미리보기 ObjectURL: file에서 파생 생성 후, 변경/언마운트 시 revoke
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!isVideoFile(f)) {
+      setError("영상 파일(mp4/webm/mov 등)만 첨부할 수 있습니다.");
+      return;
+    }
+    setError("");
+    setFile(f);
+    if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ""));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim() && !title.trim()) {
-      setError("URL 또는 제목 중 하나는 입력해주세요.");
+    if (!url.trim() && !title.trim() && !file) {
+      setError("URL · 제목 · 로컬 파일 중 하나는 입력/선택해주세요.");
       return;
     }
     setSaving(true);
     try {
-      await addVideo({ url, title, tags: parseTags(tags), note, status });
-      onSaved();
+      const item = await addVideo({
+        url,
+        title,
+        tags: parseTags(tags),
+        note,
+        status,
+        localFileName: file?.name,
+        localFileType: file?.type,
+        localFileSize: file?.size,
+      });
+      onSaved(item.id, file);
     } finally {
       setSaving(false);
     }
@@ -1021,6 +1206,53 @@ function AddVideoModal({
                 <PlatformBadge platform={platform} />
               </div>
             </Field>
+
+            {/* 로컬 영상 파일 */}
+            <Field label="로컬 영상 파일 (선택)">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={onPickFile}
+              />
+              {previewUrl ? (
+                <div className="overflow-hidden rounded-xl border border-border bg-background">
+                  <video
+                    src={previewUrl}
+                    controls
+                    playsInline
+                    className="max-h-64 w-full bg-black object-contain"
+                  />
+                  <div className="flex items-center justify-between gap-2 px-3 py-2">
+                    <p className="truncate text-xs text-subtext">
+                      {file?.name}
+                      {file ? ` · ${formatFileSize(file.size)}` : ""}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setFile(null)}
+                      className="text-xs text-subtext hover:text-red-400"
+                    >
+                      제거
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-6 text-sm text-subtext transition-colors hover:border-primary/50 hover:text-text"
+                >
+                  <Upload size={16} /> mp4/webm/mov 파일 선택
+                </button>
+              )}
+              <p className="mt-1 text-xs text-subtext/50">
+                파일은 서버에 업로드되지 않습니다. 현재 세션에서만 재생되며, 새로고침 후에는
+                다시 연결해야 합니다.
+              </p>
+            </Field>
+
             <Field label="제목">
               <input
                 value={title}

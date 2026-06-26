@@ -61,3 +61,12 @@ db.version(3)
         if (v.isFavorite === undefined) v.isFavorite = false;
       });
   });
+
+// 스키마 v4
+// - videos에 로컬 파일 메타데이터(localFileName/localFileType/localFileSize) 추가.
+//   선택적 비인덱스 필드라 데이터 변환(백필) 불필요. 인덱스 변경도 없으므로 버전 표식만 둔다.
+//   파일 본체/Blob/ObjectURL은 저장하지 않는다(서버·IndexedDB 모두).
+db.version(4).stores({
+  videos: "id, status, platform, updatedAt, createdAt, *tags",
+  tags: "name, createdAt",
+});

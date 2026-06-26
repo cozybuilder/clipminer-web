@@ -36,6 +36,14 @@ export interface VideoItem {
   status: VideoStatus;
   /** 즐겨찾기 여부 (schema v3) */
   isFavorite: boolean;
+  /**
+   * 로컬 영상 파일 메타데이터 (schema v4).
+   * 파일 본체/ObjectURL은 저장하지 않는다. 첨부 사실과 파일 정보만 보관하며,
+   * 실제 File 객체는 현재 세션 메모리에만 존재한다(새로고침 시 재연결 필요).
+   */
+  localFileName?: string;
+  localFileType?: string;
+  localFileSize?: number;
   /** 생성 시각 (epoch ms) */
   createdAt: number;
   /** 수정 시각 (epoch ms) */
@@ -54,7 +62,10 @@ export interface TagItem {
 export type NewVideoInput = Pick<
   VideoItem,
   "url" | "title" | "tags" | "note" | "status"
->;
+> &
+  Partial<
+    Pick<VideoItem, "localFileName" | "localFileType" | "localFileSize">
+  >;
 
 /** 영상 수정 입력 (변경할 필드만) */
 export type VideoPatch = Partial<NewVideoInput>;
