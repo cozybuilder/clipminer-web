@@ -1,14 +1,16 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 2 Vercel 배포 준비)
+> 최종 갱신: 2026-06-27 (Phase 3 Local 데이터 계층 MVP)
 
 ---
 
 ## 현재 단계
 
-**Phase 2 — Vercel 배포 준비 완료.** 코드/빌드 설정 점검 통과. 실제 Vercel 연결·배포는 사장 승인 후.
+**Phase 3 — Local-First 데이터 계층(IndexedDB/Dexie) 1차 완료.**
+영상 메타데이터의 추가/조회/수정/삭제가 IndexedDB에 실제 저장·영속됨을 검증함.
+실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
-웹 앱 골격(기본 페이지)까지 구성됨.
+웹 앱 골격 + 로컬 데이터 계층(개발 확인용 `/videos` UI)까지 구성됨.
 
 > **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
 > 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
@@ -60,12 +62,21 @@
 - [ ] (승인 후) Vercel 프로젝트 연결 및 첫 배포
 - [ ] (승인 후) 도메인 연결 (clipminer.cozybuilder.co.kr) — DNS 변경은 별도 범위
 
+### Phase 3 — Local-First 데이터 계층 / MVP (2026-06-27)
+- [x] Dexie 설치 (dexie 4.4.4)
+- [x] IndexedDB DB 정의 (`src/lib/db.ts`) — `videos`, `tags` 스토어 (스키마 v1)
+- [x] 타입 정의 (`src/lib/types.ts`) — `VideoItem` / `VideoStatus` / `TagItem`
+- [x] CRUD 유틸 — 영상 추가/목록/단건/수정/삭제 (`src/lib/videos.ts`), 태그 생성/조회 (`src/lib/tags.ts`)
+- [x] 개발 확인용 UI (`src/app/videos/page.tsx`) — URL/제목/태그/메모/상태 저장·목록·삭제
+- [x] 수동 검증: 추가→IndexedDB 기록, 새로고침 후 유지, 삭제 반영 확인
+- [x] 검증: `npm run lint` / `npm run build` 통과
+- 범위 제외(다음 단계): 실제 영상 파일 저장, File System Access API, JSON Import/Export
+
 ## 미완료 (이후 단계)
 
-### Phase 3 — Local-First 데이터 계층 (MVP)
-- [ ] IndexedDB(Dexie) `videos` 스토어 구성
-- [ ] 로컬 폴더 지정 + 영상 파일 저장/참조 흐름
-- [ ] 영상 등록/목록/조회/수정/삭제 + 태그/메모/제작 상태
+### Phase 4 — 영상 파일 / UX
+- [ ] 로컬 폴더 지정 + 실제 영상 파일 저장/참조 (File System Access API 등)
+- [ ] 정식 영상 관리 UI (현재 `/videos`는 개발 확인용)
 
 ### 이후 (선택적)
 - [ ] Backup/Sync — 선택적 클라우드 동기화 (이때 외부 DB/인증 재검토)

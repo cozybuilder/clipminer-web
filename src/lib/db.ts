@@ -1,0 +1,28 @@
+// ClipMiner Web — IndexedDB (Dexie) database definition.
+//
+// Local-First: 모든 사용자 데이터는 브라우저 IndexedDB에 저장된다.
+// 외부 DB / 서버 저장소 / 인증 없음.
+
+import Dexie, { type EntityTable } from "dexie";
+import type { TagItem, VideoItem } from "./types";
+
+const DB_NAME = "clipminer";
+
+/**
+ * ClipMiner 로컬 데이터베이스.
+ *
+ * Dexie 인스턴스 생성 자체는 IndexedDB를 즉시 열지 않으므로
+ * (실제 open은 첫 쿼리 시점), SSR/빌드 단계에서 모듈이 로드돼도 안전하다.
+ */
+export const db = new Dexie(DB_NAME) as Dexie & {
+  videos: EntityTable<VideoItem, "id">;
+  tags: EntityTable<TagItem, "name">;
+};
+
+// 스키마 v1
+// - videos: id(PK), status/updatedAt/createdAt 인덱스, *tags multi-entry 인덱스
+// - tags:   name(PK), createdAt 인덱스
+db.version(1).stores({
+  videos: "id, status, updatedAt, createdAt, *tags",
+  tags: "name, createdAt",
+});
