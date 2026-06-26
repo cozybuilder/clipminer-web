@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local agent/dev config (Claude Code settings, preview launch config)
 .claude/
+
+# 참고용 코드 (Phase 7 yt-dlp/cookies — 미채택, 커밋 제외)
+/reference/

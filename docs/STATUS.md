@@ -1,17 +1,19 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 6 작업 폴더(File System Access) MVP)
+> 최종 갱신: 2026-06-27 (Phase 8 Browser Connector 자동 등록)
 
 ---
 
 ## 현재 단계
 
-**Phase 6 — 작업 폴더(File System Access) MVP 완료.**
-사용자가 작업 폴더를 선택하면 디렉터리 핸들을 IndexedDB(settings, schema v5)에 영속 저장하고,
-로드 시 권한을 재확인해 폴더명/연결 상태를 표시한다. 미지원 브라우저·권한 필요 상태는 안내한다.
-일괄작업 바 버튼 순서 정리(6-B): 선택 삭제 → 제작완료 → 즐겨찾기 추가/해제 → 선택 해제.
+**Phase 8 — ClipMiner Connector(브라우저 확장) 기반 수집 + 라이브러리 자동 등록.**
+Douyin 영상 페이지에서 확장이 영상 URL/제목 추출(content-type 검증) → mp4 다운로드 →
+ClipMiner Web으로 전달 → 작업 폴더 저장 + IndexedDB 자동 등록(미제작). URL만 등록 금지.
+**핵심 대상: Douyin(1순위) · Xiaohongshu(2순위), YouTube(보조).**
+번역/태그는 Desktop titleTranslate 포팅 적용. 상세/카드 로컬 영상 즉시 무음 자동 재생.
 
-다음: 작업 폴더 기준 파일 자동 매칭/재연결 등은 이후 검토.
+> **Phase 7(yt-dlp/cookies 다운로드) 미채택:** cookies.txt 수동 업로드/서버 yt-dlp는 일반 사용자 UX·운영비에
+> 부적합 → `reference/phase7-ytdlp/`로 분리(커밋 제외). 수집은 확장으로 일원화.
 
 > **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
 > 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
@@ -146,11 +148,23 @@
 - [x] 사장 수동 테스트: 작업 폴더 선택 / mp4 첨부 / 카드 표시 / 전체선택 / 버튼 배치 확인
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
+### Phase 7 — 콘텐츠 다운로드 MVP (2026-06-27, 사장 테스트/승인 대기 — 미커밋)
+- [x] 우상단 "다운로드" 버튼(/videos) → `/download` 이동
+- [x] `/api/download` (Node 런타임): yt-dlp 실행 → mp4 스트리밍, 임시폴더만 사용(영속 저장 없음)
+      — Douyin · Xiaohongshu · YouTube URL 허용 (그 외 거부). **로컬 dev 전용 / Vercel 불가**
+- [x] `/download` UI: 제목 "콘텐츠 다운로드", 플랫폼 선택(Douyin 기본/Xiaohongshu/YouTube), URL 자동 인식, 흐름 안내, 스피너, 완료 후 "라이브러리로 이동"
+- [x] 저장: 브라우저가 작업 폴더(File System Access)에 mp4 저장 + IndexedDB 자동 등록(미제작)
+- [x] 라이브러리 로드 시 작업 폴더에서 로컬 파일 자동 재연결(권한 granted 시)
+- [x] 상세 모달 영상: autoPlay muted loop playsInline(+controls), 열리면 즉시 무음 자동 재생
+- [x] 공통 뒤로가기 버튼(BackButton) — 텍스트 링크형 폐기
+- [x] 검증: `npm run lint` / `npm run build` / 서버 API 실제 YouTube 다운로드(유효 mp4) 확인
+- [ ] (다음) Douyin/Xiaohongshu 실제 다운로드 보강(쿠키 등), 영상 편집(제목/URL/태그) UI
+
 ## 미완료 (이후 단계)
 
-### Phase 7 — 파일 자동 매칭 / 편집
-- [ ] 작업 폴더 기준 영상 파일 자동 매칭/재연결(새로고침 후 자동 복원) 검토
-- [ ] 영상 편집(제목/URL/태그) UI (현재는 상태/메모/즐겨찾기/파일연결)
+### Phase 8 — 파일 자동 매칭 / 편집
+- [ ] 작업 폴더 기준 영상 파일 자동 매칭(파일명 외 식별) 고도화
+- [ ] 영상 편집(제목/URL/태그) UI
 
 ### 이후 (선택적)
 - [ ] JSON Import/Export (백업 파일)

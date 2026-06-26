@@ -14,17 +14,15 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 
 ## 1. 현재 단계
 
-**Phase 1 완료 — Next.js 초기화 완료.** 다음 단계는 **Phase 2 Vercel 기본 배포 준비**.
+**Phase 8 — Browser Connector(확장) 기반 수집 + 라이브러리 자동 등록.**
 
-진행 이력:
-- Phase 0 ✅ 설계 문서 안착 (commit `9485137`)
-- Phase 1 ✅ Next.js 16 + TypeScript + App Router + Tailwind v4 초기화 (commit `4f0355c`)
-- Phase 1.5 ✅ 문서 정합화
-- **다음 → Phase 2: Vercel 기본 배포 준비**
+진행 요약:
+- Phase 0~1.5 ✅ 설계/초기화/문서 정합화
+- Phase 2~6 ✅ Vercel 준비 · Local-First 데이터/라이브러리 UI(Desktop 보드형) · 작업 폴더(File System Access)
+- Phase 7(yt-dlp/cookies 다운로드) → **미채택**. 코드는 `reference/`로 분리(커밋 제외).
+- Phase 8 ✅ ClipMiner Connector 확장으로 Douyin 수집 → 작업 폴더 저장 + IndexedDB 자동 등록
 
-현재까지 구현 범위: 앱 골격(기본 페이지)만 존재.
-저장 전략은 **Local-First**(IndexedDB/Dexie + 로컬 폴더, §3)로 확정.
-**Supabase / 인증 / DB 연결 / cm_session 은 MVP 범위에서 제외**한다.
+저장 전략은 **Local-First**(IndexedDB/Dexie + 로컬 폴더, §3). **Supabase / 인증 / cm_session 제외.**
 
 > 단계 전환·기능 추가는 사장님 승인으로만 한다. 세부 진행 상태는 [docs/STATUS.md](docs/STATUS.md) 기준.
 
@@ -34,7 +32,17 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 
 - `app_key = clipminer`, 정식 launch 대상은 **ClipMiner Web**. Desktop은 보조(다운로드 안내).
 - 영상(`videos`) 중심, 태그는 사용자가 직접 부착(레코드의 배열 필드), 제목은 사용자 직접 입력.
-- 배포: Vercel / 도메인 `clipminer.cozybuilder.co.kr` (서버는 앱만 서빙).
+- **핵심 대상 플랫폼: Douyin(1순위) · Xiaohongshu(2순위).** YouTube는 보조 지원이며 핵심이 아니다.
+  - Douyin/Xiaohongshu는 URL만으로 미리보기/메타데이터를 안정적으로 얻기 어려워,
+    **"다운로드 → 로컬 파일 생성 → 라이브러리 표시"** 흐름을 전제로 한다.
+  - "YouTube 전용 다운로드 도구"처럼 보이게 하지 않는다. 제품은 **콘텐츠 리서치·관리 플랫폼**(이용 정책: DESIGN §1.1).
+- **수집(다운로드)은 ClipMiner Connector 브라우저 확장에서 실행**한다. Douyin 페이지에서 확장이
+  영상 URL/제목을 추출·다운로드 → 작업 폴더 저장 → ClipMiner Web 라이브러리에 자동 등록(미제작).
+  - Web 화면에는 다운로드 버튼/엔진을 두지 않는다(`/download`은 안내·연결 상태 화면).
+  - **cookies.txt 수동 업로드 / 서버 yt-dlp 방식은 미채택**(`reference/phase7-ytdlp/`로 분리, 커밋 제외).
+  - 확장 ↔ Web: `window.postMessage`(web-bridge) 기반. 등록 수신부는 `/videos`(`src/lib/connector.ts`).
+- 배포: Vercel / 도메인 `clipminer.cozybuilder.co.kr` (앱만 서빙. 서버 다운로드 없음 → 운영비 0원).
+- 확장 PoC: `poc/douyin-extractor/`. 설계: [docs/BROWSER_CONNECTOR.md](docs/BROWSER_CONNECTOR.md), [docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md](docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md).
 
 자세한 결정은 [docs/DESIGN.md](docs/DESIGN.md) 참고.
 

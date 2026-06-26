@@ -80,3 +80,12 @@ db.version(5).stores({
   tags: "name, createdAt",
   settings: "key",
 });
+
+// 스키마 v6
+// - videos에 제목 이중화(originalTitle/translatedTitle) 추가. (Desktop original_title/translated_title 포팅)
+//   선택적 비인덱스 필드라 데이터 변환 불필요 — 버전 표식만 둔다.
+db.version(6).stores({
+  videos: "id, status, platform, updatedAt, createdAt, *tags",
+  tags: "name, createdAt",
+  settings: "key",
+});

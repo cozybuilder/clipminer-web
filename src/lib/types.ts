@@ -26,8 +26,12 @@ export interface VideoItem {
   url: string;
   /** URL로부터 추정된 플랫폼 (schema v2) */
   platform: Platform;
-  /** 사용자가 직접 입력한 제목 */
+  /** 관리용 제목 (사용자 입력 또는 번역 결과). 표시 우선순위: translatedTitle || originalTitle || title */
   title: string;
+  /** 원본 제목 (다운로드 시 플랫폼 원문, 예: 중국어). schema v6 */
+  originalTitle?: string;
+  /** 번역 제목 (한국어 관리용). schema v6 */
+  translatedTitle?: string;
   /** 사용자가 직접 부착한 태그 (배열 필드) */
   tags: string[];
   /** 사용자 메모 */
@@ -67,6 +71,8 @@ export interface SettingRow {
   key: string;
   handle?: unknown;
   name?: string;
+  /** 텍스트 값(앱 설정용, 로컬 IndexedDB에만 보관) */
+  content?: string;
 }
 
 /** 영상 생성 입력 (id/타임스탬프는 데이터 계층에서 생성) */
@@ -75,7 +81,14 @@ export type NewVideoInput = Pick<
   "url" | "title" | "tags" | "note" | "status"
 > &
   Partial<
-    Pick<VideoItem, "localFileName" | "localFileType" | "localFileSize">
+    Pick<
+      VideoItem,
+      | "localFileName"
+      | "localFileType"
+      | "localFileSize"
+      | "originalTitle"
+      | "translatedTitle"
+    >
   >;
 
 /** 영상 수정 입력 (변경할 필드만) */

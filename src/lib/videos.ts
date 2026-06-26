@@ -24,6 +24,8 @@ export async function addVideo(input: NewVideoInput): Promise<VideoItem> {
     url,
     platform: detectPlatform(url),
     title: input.title.trim(),
+    originalTitle: input.originalTitle,
+    translatedTitle: input.translatedTitle,
     tags,
     note: input.note,
     status: input.status,

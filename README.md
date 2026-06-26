@@ -3,8 +3,8 @@
 영상 레퍼런스를 모아 제목·태그·메모·제작 상태로 정리하는 **콘텐츠 리서치·관리 플랫폼**.
 (단순 "다운로드 도구"가 아니라, 적법한 범위에서 콘텐츠를 수집·분석·관리·재창작하기 위한 도구다 — [콘텐츠 이용 원칙](#콘텐츠-이용-원칙-저작권이용-정책) 참고.)
 
-> **상태:** Phase 2 — Vercel 배포 준비 완료(코드/설정 점검 통과). 실제 연결·배포는 사장 승인 후.
-> **저장 전략은 Local-First**(브라우저 IndexedDB + 로컬 폴더). MVP는 외부 DB·인증·세션을 쓰지 않는다.
+> **상태:** Phase 8 — ClipMiner Connector(브라우저 확장)로 Douyin 수집 → 라이브러리 자동 등록.
+> **저장 전략은 Local-First**(브라우저 IndexedDB + 로컬 폴더). 외부 DB·인증·세션·서버 다운로드 없음.
 
 ---
 
@@ -14,6 +14,8 @@
 | --- | --- |
 | 제품 구분 (`app_key`) | `clipminer` |
 | 정식 launch 대상 | **ClipMiner Web** |
+| 핵심 대상 플랫폼 | **Douyin(1순위) · Xiaohongshu(2순위)** / YouTube(보조) |
+| 콘텐츠 수집 | **ClipMiner Connector 브라우저 확장**에서 실행 → 작업 폴더 저장 + 라이브러리 자동 등록. (Web에 다운로드 버튼/서버 없음. cookies.txt·yt-dlp 방식 미채택) |
 | 보조 제품 | ClipMiner Desktop (다운로드 안내로만 유지) |
 | 프레임워크 | Next.js 16.2.9 (App Router, `src/` 구조) |
 | 언어 | TypeScript 5 / React 19.2.4 |

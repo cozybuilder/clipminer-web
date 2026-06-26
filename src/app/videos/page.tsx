@@ -33,6 +33,7 @@ import {
   Folder,
   FolderOpen,
   FolderX,
+  Download,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -64,8 +65,15 @@ import {
   clearWorkspace,
   queryWorkspacePermission,
   requestWorkspacePermission,
+  readFileFromWorkspace,
   type Workspace,
 } from "@/lib/workspace";
+import {
+  CONNECTOR_MSG,
+  CONNECTOR_RESULT,
+  registerFromConnector,
+  type ConnectorPayload,
+} from "@/lib/connector";
 
 type StatusFilter = "all" | VideoStatus | "favorite";
 type SortKey = "updated" | "created" | "title";
@@ -91,6 +99,11 @@ function formatDate(ms: number): string {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+// 표시 제목 우선순위 (Desktop 동일): translatedTitle → originalTitle → title
+function displayTitle(v: VideoItem): string {
+  return v.translatedTitle || v.originalTitle || v.title || "(제목 없음)";
 }
 
 function formatFileSize(bytes?: number): string {
@@ -190,9 +203,53 @@ export default function VideoLibraryPage() {
     null,
   );
 
+  // Browser Connector 수신 배너
+  const [connectorBanner, setConnectorBanner] = useState<{
+    kind: "ok" | "dup" | "err" | "info";
+    text: string;
+  } | null>(null);
+
   async function refresh() {
     setVideos(await listVideos());
   }
+
+  // 확장 등록 핸들러 — 항상 최신 상태(workspace/videos)를 보도록 ref로 보관
+  const connectorHandlerRef = useRef<
+    (payload: ConnectorPayload) => Promise<unknown>
+  >(async () => undefined);
+  connectorHandlerRef.current = async (payload: ConnectorPayload) => {
+    setConnectorBanner({ kind: "info", text: "등록 처리 중…" });
+    const res = await registerFromConnector(payload, {
+      workspace,
+      existing: videos,
+    });
+    if (res.ok && res.status === "added") {
+      if (res.blob) registerFile(res.id, new File([res.blob], payload.localFileName));
+      await refresh();
+      setConnectorBanner({ kind: "ok", text: `ClipMiner Web 등록 완료 · ${res.title}` });
+    } else if (res.ok && res.status === "duplicate") {
+      setConnectorBanner({ kind: "dup", text: `이미 등록된 영상 · ${res.title}` });
+    } else if (!res.ok) {
+      setConnectorBanner({ kind: "err", text: `등록 실패 · ${res.error}` });
+    }
+    const clean = { ...res };
+    delete (clean as { blob?: Blob }).blob;
+    return clean;
+  };
+
+  // 확장 → window.postMessage 수신
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { type?: string; payload?: ConnectorPayload };
+      if (!d || d.type !== CONNECTOR_MSG || !d.payload) return;
+      void (async () => {
+        const result = await connectorHandlerRef.current(d.payload!);
+        window.postMessage({ type: CONNECTOR_RESULT, result }, "*");
+      })();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +264,18 @@ export default function VideoLibraryPage() {
         setFsSupported(supported);
         setWorkspace(ws);
         setWorkspacePerm(perm);
+      }
+      // 작업 폴더 권한이 있으면 로컬 파일을 자동 재연결(새로고침 후 재생 복원)
+      if (active && ws && perm === "granted") {
+        const map: Record<string, string> = {};
+        for (const v of items) {
+          if (!v.localFileName) continue;
+          const file = await readFileFromWorkspace(ws.handle, v.localFileName);
+          if (file) map[v.id] = URL.createObjectURL(file);
+        }
+        if (active && Object.keys(map).length > 0) {
+          setFileUrls((prev) => ({ ...map, ...prev }));
+        }
       }
     })();
     return () => {
@@ -316,7 +385,11 @@ export default function VideoLibraryPage() {
       }
       if (tagFilter && !v.tags.includes(tagFilter)) return false;
       if (q) {
-        const hay = norm([v.title, v.url, v.note, ...v.tags].join(" "));
+        const hay = norm(
+          [v.title, v.translatedTitle, v.originalTitle, v.url, v.note, ...v.tags]
+            .filter(Boolean)
+            .join(" "),
+        );
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -437,6 +510,15 @@ export default function VideoLibraryPage() {
             </select>
           </div>
 
+          <Link
+            href="/download"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-subtext transition-colors hover:border-primary/50 hover:text-text"
+            title="확장으로 수집 (안내/연결 상태)"
+          >
+            <Download size={15} />
+            수집
+          </Link>
+
           <button
             onClick={() => setAdding(true)}
             className="flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
@@ -449,6 +531,29 @@ export default function VideoLibraryPage() {
 
       {/* ───────── 메인 ───────── */}
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-6 py-6">
+        {/* Browser Connector 등록 결과 배너 */}
+        {connectorBanner && (
+          <div
+            className={`flex items-center justify-between gap-3 rounded-card border px-4 py-3 text-sm ${
+              connectorBanner.kind === "ok"
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : connectorBanner.kind === "dup"
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                  : connectorBanner.kind === "err"
+                    ? "border-red-500/30 bg-red-500/10 text-red-400"
+                    : "border-border bg-card text-subtext"
+            }`}
+          >
+            <span className="break-words">{connectorBanner.text}</span>
+            <button
+              onClick={() => setConnectorBanner(null)}
+              className="shrink-0 text-xs opacity-70 hover:opacity-100"
+            >
+              닫기
+            </button>
+          </div>
+        )}
+
         {/* 작업 폴더 (File System Access) */}
         <WorkspaceBar
           supported={fsSupported}
@@ -872,7 +977,7 @@ function VideoCard({
       {/* 정보 */}
       <div className="flex flex-1 flex-col gap-2 p-3">
         <p className="line-clamp-2 text-sm font-medium leading-snug text-text">
-          {video.title || "(제목 없음)"}
+          {displayTitle(video)}
         </p>
 
         {video.tags.length > 0 && (
@@ -960,6 +1065,16 @@ function DetailModal({
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState(video.note);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // 상세 모달이 열리면(로컬 파일 연결 시) 즉시 무음 자동 재생
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && fileUrl) {
+      el.muted = true;
+      void el.play().catch(() => {});
+    }
+  }, [fileUrl]);
 
   function startEdit() {
     setMemoDraft(video.note);
@@ -1027,9 +1142,13 @@ function DetailModal({
           <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-card border border-border bg-border">
             {fileUrl ? (
               <video
+                ref={videoRef}
                 src={fileUrl}
-                controls
+                autoPlay
+                muted
+                loop
                 playsInline
+                controls
                 className="h-full w-full object-contain"
               />
             ) : thumb ? (
@@ -1047,7 +1166,7 @@ function DetailModal({
           {/* 정보 */}
           <div className="flex flex-col gap-4">
             <h1 className="text-xl font-semibold leading-snug text-text">
-              {video.title || "(제목 없음)"}
+              {displayTitle(video)}
             </h1>
 
             <InfoRow icon={<Calendar size={15} />} label="등록일">
@@ -1302,8 +1421,12 @@ function AddVideoModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim() && !title.trim() && !file) {
-      setError("URL · 제목 · 로컬 파일 중 하나는 입력/선택해주세요.");
+    // URL만으로는 등록하지 않는다(No Preview 방지). 로컬 영상 파일 필수.
+    // 온라인 영상은 상단 "다운로드"로 받아 등록한다.
+    if (!file) {
+      setError(
+        "로컬 영상 파일을 선택하세요. URL만으로는 추가할 수 없습니다 — 온라인 영상은 ‘다운로드’를 이용하세요.",
+      );
       return;
     }
     setSaving(true);
@@ -1335,7 +1458,7 @@ function AddVideoModal({
 
       <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col rounded-card border border-border bg-card shadow-2xl shadow-black/40">
         <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-5">
-          <h2 className="text-lg font-semibold text-text">영상 추가</h2>
+          <h2 className="text-lg font-semibold text-text">로컬 영상 추가</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
@@ -1360,7 +1483,7 @@ function AddVideoModal({
             </Field>
 
             {/* 로컬 영상 파일 */}
-            <Field label="로컬 영상 파일 (선택)">
+            <Field label="로컬 영상 파일 (필수)">
               <input
                 ref={fileInputRef}
                 type="file"

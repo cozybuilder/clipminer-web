@@ -75,3 +75,36 @@ export async function requestWorkspacePermission(
     return "denied";
   }
 }
+
+/** 쓰기 권한 확보 (사용자 제스처 필요). 다운로드 저장 전에 호출 */
+export async function ensureWritePermission(handle: DirHandle): Promise<boolean> {
+  if (!handle.queryPermission || !handle.requestPermission) return true;
+  if ((await handle.queryPermission({ mode: "readwrite" })) === "granted")
+    return true;
+  return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
+}
+
+/** 작업 폴더에 파일 저장 */
+export async function saveFileToWorkspace(
+  handle: FileSystemDirectoryHandle,
+  name: string,
+  data: Blob,
+): Promise<void> {
+  const fileHandle = await handle.getFileHandle(name, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(data);
+  await writable.close();
+}
+
+/** 작업 폴더에서 파일 읽기 (없으면 null) */
+export async function readFileFromWorkspace(
+  handle: FileSystemDirectoryHandle,
+  name: string,
+): Promise<File | null> {
+  try {
+    const fileHandle = await handle.getFileHandle(name);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
+}
