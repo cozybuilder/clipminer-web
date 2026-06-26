@@ -23,7 +23,8 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 - **다음 → Phase 2: Vercel 기본 배포 준비**
 
 현재까지 구현 범위: 앱 골격(기본 페이지)만 존재.
-**Supabase / 인증 / DB / cm_session / 수집 기능은 아직 미구현**이며, 별도 승인된 단계에서 진행한다.
+저장 전략은 **Local-First**(IndexedDB/Dexie + 로컬 폴더, §3)로 확정.
+**Supabase / 인증 / DB 연결 / cm_session 은 MVP 범위에서 제외**한다.
 
 > 단계 전환·기능 추가는 사장님 승인으로만 한다. 세부 진행 상태는 [docs/STATUS.md](docs/STATUS.md) 기준.
 
@@ -32,20 +33,27 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 ## 2. 제품 핵심
 
 - `app_key = clipminer`, 정식 launch 대상은 **ClipMiner Web**. Desktop은 보조(다운로드 안내).
-- 영상(`videos`) 중심, 태그는 `videos.tags text[]`, 제목은 사용자 직접 입력.
-- 배포: Vercel / 도메인 `clipminer.cozybuilder.co.kr`.
+- 영상(`videos`) 중심, 태그는 사용자가 직접 부착(레코드의 배열 필드), 제목은 사용자 직접 입력.
+- 배포: Vercel / 도메인 `clipminer.cozybuilder.co.kr` (서버는 앱만 서빙).
 
 자세한 결정은 [docs/DESIGN.md](docs/DESIGN.md) 참고.
 
 ---
 
-## 3. 절대 규칙 (구현 단계에서도 유지)
+## 3. 저장 전략 — Local First (MVP 절대 규칙)
 
-1. **클라이언트가 보낸 `user_id`를 신뢰하지 않는다.** `user_id`는 서버가 `cm_session`에서만 도출한다.
-2. 모든 사용자 데이터 쿼리는 **`user_id`로 스코프**한다. 스코프 누락 = 데이터 유출.
-3. service-role 키는 **서버에서만** 사용한다. 클라이언트 노출 금지.
-4. MVP에서는 Supabase native auth(`auth.uid()`) RLS를 사용하지 않는다 — 보호는 애플리케이션 코드 책임.
-5. 크로스 프로젝트 FK를 만들지 않는다. `user_id`는 homepage `user.id` 참조값으로만 저장.
+> 2026-06-27 전환. 이전의 Supabase/세션/`user_id` 스코프 규칙은 **MVP에서 폐기**되었다.
+
+1. **외부 DB를 쓰지 않는다.** 영상 메타데이터·태그·메모·제작 상태는 브라우저
+   **IndexedDB(Dexie)** 에 저장한다.
+2. **실제 영상 파일**은 사용자 PC의 **지정 폴더**에 저장한다. 파일 본체는 IndexedDB에 넣지 않으며,
+   메타 레코드는 파일 참조만 보관한다.
+3. **인증/세션(`cm_session`) 없음.** 단일 로컬 사용자 전제. 서버 측 사용자 스코프/RLS 개념 없음.
+4. **서버는 사용자 데이터를 보관하지 않는다.** 데이터는 기본적으로 사용자 기기에 남는다.
+5. Backup/Sync(선택적 클라우드 동기화)는 **MVP 이후 별도 기능**으로만 검토한다.
+   (그 시점에 인증/외부 저장소 재도입 여부 재논의)
+
+> Supabase / Auth / DB 연결 / env 비밀키는 MVP 구현 대상이 아니다.
 
 ---
 

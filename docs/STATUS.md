@@ -1,6 +1,6 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 1.5 문서 정합화 완료)
+> 최종 갱신: 2026-06-27 (저장 전략 → Local-First 전환)
 
 ---
 
@@ -8,7 +8,11 @@
 
 **Phase 1 완료 + Phase 1.5(문서 정합화) 완료.** 다음 단계는 **Phase 2 Vercel 기본 배포**.
 
-웹 앱 골격(기본 페이지)까지 구성됨. Supabase/인증/DB/수집 기능은 아직 구현하지 않는다.
+웹 앱 골격(기본 페이지)까지 구성됨.
+
+> **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
+> 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
+> 실제 영상 파일 → **사용자 PC 지정 폴더**. **외부 DB / Supabase / 인증 / `cm_session` 은 MVP 제외.**
 
 ---
 
@@ -43,17 +47,23 @@
 - [x] AGENTS.md 삭제 (create-next-app 기본 생성물) — 기준 문서를 CLAUDE.md + docs/ 로 통일
 - [x] docs/STATUS.md · docs/ROADMAP.md 정합화
 
+### 저장 전략 전환 — Local-First (2026-06-27, 문서 반영)
+- [x] DESIGN.md · DB.md · CLAUDE.md · README.md · ROADMAP.md · STATUS.md 를 Local-First로 갱신
+- [x] Supabase/Auth/cm_session 전제를 폐기(superseded)로 기록 보존
+
 ## 미완료 (이후 단계)
 
 ### Phase 2 — Vercel 기본 배포 (다음)
-- [ ] Vercel 프로젝트 연결 및 기본 배포
+- [ ] Vercel 프로젝트 연결 및 기본 배포 (앱만 서빙)
 - [ ] 도메인 연결 준비 (clipminer.cozybuilder.co.kr)
 
-### Phase 3+ — 데이터/세션/수집 (MVP)
-- [ ] Supabase 독립 프로젝트 생성 및 환경변수 확정
-- [ ] DB 마이그레이션 작성 (`videos` 테이블)
-- [ ] `cm_session` 발급/검증 연동 (homepage `/apps/clipminer` 진입 흐름)
-- [ ] 영상 등록/목록/조회/삭제 기능 구현
+### Phase 3 — Local-First 데이터 계층 (MVP)
+- [ ] IndexedDB(Dexie) `videos` 스토어 구성
+- [ ] 로컬 폴더 지정 + 영상 파일 저장/참조 흐름
+- [ ] 영상 등록/목록/조회/수정/삭제 + 태그/메모/제작 상태
+
+### 이후 (선택적)
+- [ ] Backup/Sync — 선택적 클라우드 동기화 (이때 외부 DB/인증 재검토)
 
 ---
 
@@ -66,17 +76,17 @@
 
 ---
 
-## 결정사항 반영 현황 (A~H)
+## 결정사항 현황 (Local-First 전환 반영)
 
-모두 `docs/DESIGN.md §7` 매핑 표에 반영 완료.
+상세는 `docs/DESIGN.md` §6(유지) / §9(폐기) 참고.
 
-| 결정 | 반영 |
+| 결정 | 상태 |
 | --- | --- |
-| A 신원·세션·RLS | ✅ |
-| B Supabase 독립 프로젝트 | ✅ |
-| C 태그 `text[]` | ✅ |
-| D 제목 직접 입력 | ✅ |
-| E app_key / 제품 구분 | ✅ |
-| F Settings 생략 | ✅ |
-| G 세션 TTL 7일 | ✅ |
-| H 도메인/배포 | ✅ |
+| A 신원·세션·RLS (cm_session/service-role) | ⛔ MVP 폐기 (Local-First) |
+| B Supabase 독립 프로젝트 | ⛔ MVP 폐기 (외부 DB 미사용) |
+| C 태그 | ✅ 유지 (저장소만 IndexedDB로 변경) |
+| D 제목 직접 입력 | ✅ 유지 |
+| E app_key / 제품 구분 | ✅ 유지 |
+| F Settings 생략 | ✅ 유지 (최소 폴더 지정만) |
+| G 세션 TTL 7일 | ⛔ MVP 폐기 (세션 없음) |
+| H 도메인/배포 | ✅ 유지 (서버는 앱만 서빙) |

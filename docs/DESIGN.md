@@ -1,7 +1,11 @@
 # ClipMiner Web — 설계 문서 (DESIGN)
 
-> Phase 0 설계 안착본. 이 문서는 구현 이전의 **결정 기록**이며, 코드와 충돌할 경우
-> 코드를 우선하되 문서를 갱신한다.
+> 이 문서는 구현 이전/이후의 **결정 기록**이며, 코드와 충돌할 경우 코드를 우선하되
+> 문서를 갱신한다.
+>
+> **⚠️ 저장 전략 변경 (2026-06-27):** MVP는 외부 DB를 사용하지 않는 **Local-First**로 전환했다.
+> Supabase / Auth / `cm_session`은 MVP 범위에서 제외한다. 이전 Phase 0 설계의
+> 서버 DB·세션 전제(아래 §9 결정 A·B·G)는 **MVP 한정으로 폐기(superseded)** 되었다.
 
 ---
 
@@ -16,96 +20,111 @@ ClipMiner Web은 사용자가 영상 클립을 모아 직접 제목과 태그를
 
 ---
 
-## 2. 신원 · 세션 · 접근 제어 (결정 A)
+## 2. 저장 전략 — Local First (MVP 핵심)
 
-### 2.1 세션 모델
-- 사용자는 homepage `/apps/clipminer` 진입 흐름을 통해 ClipMiner Web에 들어온다.
-- 진입 시 **`cm_session` 쿠키**가 발급된다.
-- 서버는 이 쿠키로 사용자를 식별하고, 모든 데이터 접근에 사용할 `user_id`를 도출한다.
+ClipMiner Web MVP는 **사용자 데이터를 사용자 컴퓨터에 둔다.** 서버는 앱(정적/Next.js)만 제공한다.
 
-### 2.2 데이터 접근 방식
-- 서버는 Supabase에 **service-role 키**로 접근한다.
-- `user_id`는 **서버가 세션에서 도출하여 수동으로 쿼리에 스코프**한다.
-  (예: 모든 `videos` 조회/변경 시 `where user_id = :session_user_id`)
-- **MVP에서는 Supabase native auth `auth.uid()` 기반 RLS를 사용하지 않는다.**
+### 2.1 데이터 위치
+| 데이터 | 저장 위치 | 비고 |
+| --- | --- | --- |
+| 영상 메타데이터 (제목·URL/출처 등) | 브라우저 **IndexedDB (Dexie)** | |
+| 태그 | IndexedDB (Dexie) | 영상 레코드의 배열 필드 |
+| 메모 | IndexedDB (Dexie) | |
+| 제작 상태 | IndexedDB (Dexie) | |
+| **실제 영상 파일** | 사용자 PC의 **지정 폴더** | 파일 본체는 DB에 넣지 않음 |
 
-### 2.3 보안 규칙 (필수)
-- **클라이언트가 전송한 `user_id`는 절대 신뢰하지 않는다.** 항상 서버 세션값을 사용한다.
-- service-role 키는 서버 환경에서만 사용하며 클라이언트에 노출하지 않는다.
-- 사용자 데이터 접근 경로마다 `user_id` 스코프 누락이 없는지 코드 리뷰에서 점검한다.
+### 2.2 원칙
+- 외부 DB(Supabase 등)를 MVP에서 사용하지 않는다.
+- 인증/세션(`cm_session`)을 MVP에서 사용하지 않는다 — 로컬 단일 사용자 전제.
+- 서버는 사용자 데이터를 보관하지 않는다. 데이터는 기본적으로 사용자 기기에 남는다.
+- 영상 파일 본체는 IndexedDB가 아니라 사용자가 지정한 로컬 폴더에 저장한다.
+  (메타데이터는 IndexedDB에서 해당 파일을 참조)
 
-### 2.4 세션 수명 (결정 G)
-- `cm_session` TTL = **7일**
-- 만료 시 사용자에게 homepage `/apps/clipminer` 재진입을 안내한다.
-
-> **위험 메모:** RLS 미사용으로 인해 `user_id` 스코프가 애플리케이션 코드에 전적으로 의존한다.
-> 스코프 누락 = 데이터 유출이므로, Phase 1에서 공통 데이터 접근 레이어(헬퍼)로
-> 스코프를 강제하는 설계를 권장한다.
-
----
-
-## 3. Supabase 구성 (결정 B)
-
-- ClipMiner Web은 **독립 Supabase 프로젝트**를 사용한다. (homepage와 분리)
-- `user_id`는 **homepage `user.id`의 참조값**으로 저장한다. (homepage 사용자 식별자를 그대로 보관)
-- **크로스 프로젝트 FK는 두지 않는다.** `user_id`는 단순 값으로 저장하며,
-  외래 키 제약 없이 애플리케이션 레벨에서만 일관성을 관리한다.
+### 2.3 함의 / 주의
+- 데이터는 **브라우저/기기 로컬**에 종속된다. 브라우저 데이터 삭제, 다른 기기 사용 시
+  공유되지 않는다 — 이는 의도된 동작이며, 동기화는 §8 향후 기능으로 분리한다.
+- 로컬 폴더 접근은 브라우저의 파일 시스템 접근 능력에 의존한다. (구체 방식은 구현 단계에서 확정)
+- 인증이 없으므로 **서버 측 사용자 스코프/RLS 개념이 MVP에 존재하지 않는다.**
 
 ---
 
-## 4. 데이터 모델 개요
+## 3. 데이터 모델 개요
 
 상세 스키마는 [DB.md](DB.md) 참고. 핵심 요약:
 
-- 중심 엔터티는 **`videos`**.
-- **태그는 `videos.tags text[]` 컬럼에 저장** (결정 C). MVP에서는 별도 `tags` 테이블을 두지 않는다.
-- **제목은 사용자가 직접 입력** (결정 D). 자동 변환/추출 로직은 MVP 제외.
+- 중심 엔터티는 **영상(`videos`)** — IndexedDB(Dexie) object store.
+- **태그는 영상 레코드의 배열 필드**로 저장 (별도 tags 스토어 없음).
+- **제목은 사용자가 직접 입력** (자동 변환/추출 로직은 MVP 제외).
+- 각 영상 레코드는 사용자 지정 폴더에 저장된 **실제 파일에 대한 참조**를 가진다.
 
 ---
 
-## 5. 화면 / UX 범위
+## 4. 화면 / UX 범위
 
-### 5.1 포함 (MVP)
-- 진입(세션 확인) → 영상 목록
-- 영상 등록: URL/식별 정보 + **사용자 직접 제목 입력** + 태그 입력
-- 영상 목록 조회 / 단건 조회 / 삭제
+### 4.1 포함 (MVP)
+- 영상 목록 (로컬 IndexedDB 기반)
+- 영상 등록: URL/식별 정보 + **사용자 직접 제목 입력** + 태그 + 메모 + 제작 상태
+- 영상 목록 조회 / 단건 조회 / 수정 / 삭제
 - 태그로 필터(기본 수준)
+- 영상 파일을 저장할 **로컬 폴더 지정** 흐름 (Local-First 필수)
 
-### 5.2 제외 (결정 F)
-- 별도 Settings / Profile 화면은 만들지 않는다.
+### 4.2 제외
+- 별도 Settings / Profile 화면은 만들지 않는다. (폴더 지정 등 최소 설정만 필요 시 단순 노출)
 - 필요 시 상단에 **homepage로 돌아가기 링크**만 제공한다.
+- 로그인/세션 UI 없음 (MVP 인증 없음).
 
 ---
 
-## 6. 배포 (결정 H)
+## 5. 배포
 
 - **도메인:** https://clipminer.cozybuilder.co.kr
 - **호스팅:** Vercel
-- 서버 환경변수로 Supabase URL / service-role 키 / 세션 비밀값을 주입한다.
-  (구체적 키 목록은 Phase 1 착수 시 확정)
+- 서버는 앱만 서빙한다. **사용자 데이터/비밀키를 위한 서버 환경변수가 MVP에 필요 없다.**
+  (Supabase/세션 키 불필요)
 
 ---
 
-## 7. 결정사항 매핑 (A~H)
+## 6. 유지되는 제품 결정
 
-| 결정 | 내용 | 반영 위치 |
+| 결정 | 내용 | 상태 |
 | --- | --- | --- |
-| A | cm_session 쿠키 + service-role + user_id 수동 스코프, native RLS 미사용, 클라 user_id 금지 | §2 |
-| B | 독립 Supabase 프로젝트, user_id는 homepage user.id 참조값, 크로스 FK 없음 | §3 |
-| C | `videos.tags text[]` 사용, tags 테이블 미사용 | §4, DB.md |
-| D | 제목 자동 변환 제외, 사용자 직접 입력 | §4, §5.1 |
-| E | `app_key = clipminer`, Web 정식 launch, Desktop 보조 | §1 |
-| F | 별도 Settings 생략, homepage 링크만 | §5.2 |
-| G | cm_session TTL 7일, 만료 시 재진입 안내 | §2.4 |
-| H | clipminer.cozybuilder.co.kr, Vercel 배포 | §6 |
+| D | 제목 자동 변환 제외, **사용자 직접 입력** | 유효 |
+| E | `app_key = clipminer`, Web 정식 launch, Desktop 보조 | 유효 |
+| F | 별도 Settings/Profile 화면 생략 (최소 설정만) | 유효 |
+| H | `clipminer.cozybuilder.co.kr`, Vercel 배포 | 유효 |
+| 태그 | 사용자가 직접 부착, 영상 레코드의 배열 필드 | 유효 (저장소만 IndexedDB로 변경) |
 
 ---
 
-## 8. 명시적 비목표 (Non-goals, MVP)
+## 7. 명시적 비목표 (Non-goals, MVP)
 
-- Supabase native auth / `auth.uid()` RLS
+- 외부 DB(Supabase 등) 연동
+- 인증 / 세션 / `cm_session`
+- 서버 측 사용자 데이터 보관 및 RLS
 - 제목 자동 생성/변환
-- 정규화된 `tags` 테이블 및 다대다 관계
-- 크로스 프로젝트 외래 키
-- 독립 Settings/Profile 기능
+- 정규화된 태그 스토어 / 다대다 관계
+- 멀티 기기 동기화 (아래 §8 참조)
 - Desktop ↔ Web 데이터 동기화
+
+---
+
+## 8. 향후 기능 (MVP 이후, 선택적)
+
+- **Backup / Sync:** 필요해질 때만 선택적 클라우드 동기화를 **별도 기능**으로 검토한다.
+  (이 시점에 인증/서버 저장소 도입 여부를 재논의)
+- 영상 메타데이터 enrich (제공자/썸네일/duration)
+- 태그 자동완성 / 사용 빈도 집계
+- 컬렉션/폴더 개념
+
+---
+
+## 9. 폐기된 결정 (Superseded, 기록 보존)
+
+> 아래는 Phase 0 설계의 서버 DB·세션 전제로, **Local-First 전환으로 MVP에서 폐기**되었다.
+> 향후 Sync 기능 검토 시 참고 자료로만 남긴다.
+
+- **A. 신원·세션·접근 제어** — `cm_session` 쿠키 + service-role + `user_id` 수동 스코프,
+  native RLS 미사용, 클라이언트 `user_id` 금지. → MVP 인증 제거로 폐기.
+- **B. Supabase 구성** — clipminer-web 독립 Supabase 프로젝트, `user_id`는 homepage `user.id`
+  참조값, 크로스 프로젝트 FK 없음. → MVP 외부 DB 제거로 폐기.
+- **G. 세션 수명** — `cm_session` TTL 7일, 만료 시 재진입 안내. → 세션 제거로 폐기.

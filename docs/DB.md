@@ -1,69 +1,77 @@
-# ClipMiner Web — 데이터베이스 설계 (DB)
+# ClipMiner Web — 데이터 저장 설계 (DB)
 
-> Phase 0 설계 안착본. **마이그레이션/실제 스키마는 아직 작성하지 않는다.**
-> 이 문서는 Phase 1 마이그레이션 작성 시의 기준이 된다.
+> **저장 전략: Local-First (2026-06-27).** MVP는 외부 DB를 사용하지 않는다.
+> 영상 메타데이터·태그·메모·제작 상태는 브라우저 **IndexedDB(Dexie)** 에,
+> 실제 영상 파일은 **사용자 PC의 지정 폴더**에 저장한다.
+> 이전 Postgres/Supabase 스키마 설계는 §4에 폐기 기록으로만 남긴다.
 
 ---
 
 ## 1. 기본 원칙
 
-- 데이터베이스: **clipminer-web 전용 독립 Supabase 프로젝트** (결정 B)
-- 접근: 서버에서 **service-role 키**로 접근, `user_id`는 서버 세션에서 도출하여 수동 스코프 (결정 A)
-- **Supabase native auth / RLS(`auth.uid()`)는 MVP에서 사용하지 않는다.**
-- `user_id`는 **homepage `user.id`의 참조값**으로 저장하며, **크로스 프로젝트 FK는 두지 않는다.**
+- 저장소: 브라우저 **IndexedDB**, 접근 라이브러리는 **Dexie**.
+- 외부 DB / 서버 저장소 없음. 인증/세션 없음 (단일 로컬 사용자 전제).
+- **영상 파일 본체는 IndexedDB에 넣지 않는다.** 사용자가 지정한 로컬 폴더에 저장하고,
+  메타 레코드는 그 파일에 대한 참조만 보관한다.
 
 ---
 
-## 2. 테이블
+## 2. Dexie 스토어 (object store)
 
 ### 2.1 `videos`
 
-영상 클립의 중심 테이블.
+영상 클립의 중심 스토어. (필드 구성은 구현 단계에서 확정되는 초안)
 
-| 컬럼 | 타입 | 제약 / 기본값 | 설명 |
-| --- | --- | --- | --- |
-| `id` | `uuid` | PK, default `gen_random_uuid()` | 영상 식별자 |
-| `user_id` | `text` | NOT NULL, 인덱스 | homepage `user.id` 참조값 (FK 아님) |
-| `title` | `text` | NOT NULL | **사용자가 직접 입력한 제목** (자동 변환 없음, 결정 D) |
-| `url` | `text` | NOT NULL | 영상 원본 URL |
-| `tags` | `text[]` | NOT NULL, default `'{}'` | 태그 배열 (결정 C, 별도 tags 테이블 없음) |
-| `note` | `text` | NULL 허용 | 사용자 메모 (선택) |
-| `created_at` | `timestamptz` | NOT NULL, default `now()` | 생성 시각 |
-| `updated_at` | `timestamptz` | NOT NULL, default `now()` | 수정 시각 |
-
-> `url` 외에 영상 제공자/썸네일/길이 등 메타 컬럼은 Phase 1 구현 시 필요 범위에서 확정한다.
-> MVP에서는 최소 컬럼으로 시작한다.
-
-#### 인덱스 (권장)
-- `user_id` 단일 인덱스 — 사용자별 목록 조회 핵심 경로.
-- `tags` GIN 인덱스 — 태그 필터(`tags @> ...`, `tags && ...`)를 쓸 경우.
-- `(user_id, created_at desc)` 복합 인덱스 — 최신순 목록 정렬 시 고려.
-
----
-
-## 3. 미채택 항목 (MVP 제외)
-
-| 항목 | 결정 | 사유 |
+| 필드 | 타입 | 설명 |
 | --- | --- | --- |
-| `tags` 테이블 (정규화) | 미사용 (C) | `videos.tags text[]`로 충분, 복잡도 절감 |
-| `auth.users` / RLS | 미사용 (A) | service-role + 수동 스코프 사용 |
-| 크로스 프로젝트 FK | 미사용 (B) | 독립 프로젝트, `user_id`는 참조값으로만 보관 |
-| `settings` / `profiles` 테이블 | 미사용 (F) | 별도 Settings 화면 없음 |
+| `id` | string (uuid) | 영상 식별자 (기본 키) |
+| `title` | string | **사용자가 직접 입력한 제목** (자동 변환 없음) |
+| `url` | string | 영상 원본 URL / 출처 |
+| `tags` | string[] | 태그 배열 (사용자 직접 부착, 별도 스토어 없음) |
+| `note` | string \| null | 사용자 메모 (선택) |
+| `status` | string | 제작 상태 (예: 대기/진행/완료 — 값 집합은 구현 시 확정) |
+| `fileRef` | object \| null | 로컬 폴더에 저장된 실제 파일 참조 (핸들/경로 등, 구현 시 확정) |
+| `createdAt` | number (epoch ms) | 생성 시각 |
+| `updatedAt` | number (epoch ms) | 수정 시각 |
+
+#### 인덱스 (권장, Dexie 스키마 기준)
+- `id` (primary key)
+- `updatedAt` / `createdAt` — 최신순 목록 정렬용
+- `*tags` (multi-entry 인덱스) — 태그 필터용
+- `status` — 상태별 필터 시
+
+> 위 필드/인덱스는 초안이며, 실제 Dexie 스키마 버전·마이그레이션은 구현 단계에서 확정한다.
 
 ---
 
-## 4. 데이터 접근 규칙 (구현 시 강제)
+## 3. 영상 파일 저장 (로컬 폴더)
 
-1. 모든 `videos` 쿼리는 **반드시 `user_id = <세션 user_id>`로 스코프**한다.
-2. `user_id`는 **클라이언트 입력에서 받지 않는다.** 서버 세션(`cm_session`)에서만 도출한다.
-3. service-role 키는 서버에서만 사용한다.
-4. 스코프 누락을 막기 위해 공통 데이터 접근 헬퍼를 두는 것을 권장한다. (DESIGN.md §2.3 위험 메모)
+- 실제 영상 파일은 사용자가 지정한 **로컬 폴더**에 저장한다.
+- 폴더 지정/파일 읽기·쓰기 방식(예: File System Access API의 디렉터리 핸들 등)은
+  구현 단계에서 확정한다.
+- `videos.fileRef`는 이 폴더 내 파일을 다시 찾기 위한 참조를 담는다.
+- 파일 본체와 메타데이터의 정합성(파일 삭제/이동 시 처리)은 구현 시 정책으로 정한다.
+
+---
+
+## 4. 폐기된 설계 (Superseded, 기록 보존)
+
+> 아래는 Phase 0의 서버 DB(Postgres/Supabase) 설계로, Local-First 전환으로 **MVP에서 폐기**.
+> 향후 Backup/Sync 기능 검토 시 참고용으로만 남긴다.
+
+- **저장소:** clipminer-web 전용 독립 Supabase(Postgres) 프로젝트.
+- **테이블 `videos`** (Postgres): `id uuid PK`, `user_id text`, `title text`, `url text`,
+  `tags text[]`, `note text`, `created_at timestamptz`, `updated_at timestamptz`.
+  인덱스: `user_id`, `tags` GIN, `(user_id, created_at desc)`.
+- **접근 규칙:** service-role 키 + 서버 세션에서 도출한 `user_id` 수동 스코프,
+  `auth.uid()` RLS 미사용, 클라이언트 `user_id` 금지.
+- **미채택:** 정규화 `tags` 테이블, `auth.users`/RLS, 크로스 프로젝트 FK, `settings`/`profiles` 테이블.
 
 ---
 
 ## 5. 향후 확장 후보 (참고, MVP 아님)
 
-- 영상 메타데이터 enrich (제공자, 썸네일, duration 등)
-- 태그 사용 빈도 집계 / 자동완성 → 필요해지면 `tags` 정규화 재검토
+- 선택적 클라우드 Backup/Sync (이 시점에 외부 DB/인증 재도입 검토)
+- 영상 메타데이터 enrich (제공자/썸네일/duration)
+- 태그 자동완성 / 사용 빈도 집계
 - 컬렉션/폴더 개념
-- 공유/공개 링크
