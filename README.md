@@ -2,9 +2,8 @@
 
 영상 클립을 모으고, 직접 제목과 태그를 붙여 정리하는 웹 애플리케이션.
 
-> **상태:** Phase 1 완료 — Next.js 앱 골격 초기화 완료.
+> **상태:** Phase 2 — Vercel 배포 준비 완료(코드/설정 점검 통과). 실제 연결·배포는 사장 승인 후.
 > **저장 전략은 Local-First**(브라우저 IndexedDB + 로컬 폴더). MVP는 외부 DB·인증·세션을 쓰지 않는다.
-> 다음 단계는 Phase 2 Vercel 기본 배포.
 
 ---
 
@@ -61,6 +60,32 @@ clipminer-web/
 - ⬜ 로컬 폴더 영상 파일 저장 (미구현)
 - ⬜ 영상 등록·목록·태그·메모·제작 상태 기능 (미구현)
 - ⛔ 외부 DB / 인증 / 세션 — MVP 제외
+
+---
+
+## 배포 (Vercel)
+
+> **상태:** Phase 2 — 배포 준비 완료(코드/설정 점검 통과). 실제 Vercel 연결·배포는 사장 승인 후 진행.
+
+표준 Next.js 16 프로젝트이므로 Vercel이 프레임워크를 자동 감지한다. **MVP는 Local-First라
+서버 환경변수/비밀키가 필요 없다.**
+
+### Vercel 프로젝트 설정값
+| 항목 | 값 |
+| --- | --- |
+| Framework Preset | Next.js (자동 감지) |
+| Root Directory | `./` (저장소 루트) |
+| Build Command | `next build` (기본값, 비워두면 자동) |
+| Install Command | `npm install` (기본값, `package-lock.json` 존재) |
+| Output | Next.js 프리셋 (수동 설정 불필요) |
+| Production Branch | `main` |
+| Environment Variables | **없음** (외부 DB/인증 미사용) |
+| Node.js Version | 기본값(20.x/22.x) 사용 가능 — 별도 고정 불필요 |
+
+### 전제 조건 / 후속(이번 범위 밖)
+- 도메인 `clipminer.cozybuilder.co.kr` 연결은 첫 배포 이후 Vercel Domains에서 설정.
+- DNS(Cloudflare 등) 변경은 본 단계 범위 밖 — 별도 승인/작업으로 진행.
+- `.env*` / `.vercel` 은 커밋하지 않는다(`.gitignore` 처리됨).
 
 ---
 

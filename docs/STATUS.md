@@ -1,12 +1,12 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (저장 전략 → Local-First 전환)
+> 최종 갱신: 2026-06-27 (Phase 2 Vercel 배포 준비)
 
 ---
 
 ## 현재 단계
 
-**Phase 1 완료 + Phase 1.5(문서 정합화) 완료.** 다음 단계는 **Phase 2 Vercel 기본 배포**.
+**Phase 2 — Vercel 배포 준비 완료.** 코드/빌드 설정 점검 통과. 실제 Vercel 연결·배포는 사장 승인 후.
 
 웹 앱 골격(기본 페이지)까지 구성됨.
 
@@ -51,11 +51,16 @@
 - [x] DESIGN.md · DB.md · CLAUDE.md · README.md · ROADMAP.md · STATUS.md 를 Local-First로 갱신
 - [x] Supabase/Auth/cm_session 전제를 폐기(superseded)로 기록 보존
 
-## 미완료 (이후 단계)
+### Phase 2 — Vercel 배포 준비 (2026-06-27)
+- [x] 배포 가능 상태 점검: `npm run lint` / `npm run build` 통과
+- [x] 빌드 설정 확인: `next.config.ts`(기본), `package.json` 스크립트(`build`/`start`) 정상
+- [x] 표준 Next.js 16 → Vercel 자동 감지 대상 확인
+- [x] Vercel 설정값 문서화 (README "배포 (Vercel)") — env 불필요(Local-First)
+- [x] `.env*` / `.vercel` gitignore 확인
+- [ ] (승인 후) Vercel 프로젝트 연결 및 첫 배포
+- [ ] (승인 후) 도메인 연결 (clipminer.cozybuilder.co.kr) — DNS 변경은 별도 범위
 
-### Phase 2 — Vercel 기본 배포 (다음)
-- [ ] Vercel 프로젝트 연결 및 기본 배포 (앱만 서빙)
-- [ ] 도메인 연결 준비 (clipminer.cozybuilder.co.kr)
+## 미완료 (이후 단계)
 
 ### Phase 3 — Local-First 데이터 계층 (MVP)
 - [ ] IndexedDB(Dexie) `videos` 스토어 구성
