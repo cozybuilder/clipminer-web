@@ -1,15 +1,15 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 4-D Desktop 카드/상세 흐름 보강)
+> 최종 갱신: 2026-06-27 (Phase 4-E 즐겨찾기 + 다중선택 + 일괄작업)
 
 ---
 
 ## 현재 단계
 
-**Phase 4-D — Desktop 카드/상세 흐름 보강 완료.**
-카드에 플랫폼 배지 + URL 복사 추가, 카드 클릭 시 **상세 모달**(9:16 / URL 열기·복사 / 태그 / 상태 변경 /
-메모 수정 / 삭제) 제공. 추가 모달에 플랫폼 자동 추정(YouTube/Douyin/Xiaohongshu/TikTok/기타) 표시.
-**스키마 v2**: `platform` 필드 추가 + Dexie migration(기존 레코드 URL로 백필).
+**Phase 4-E — 즐겨찾기 / 다중선택 / 일괄작업 이식 완료.**
+카드 즐겨찾기(별) 토글 + 상세 모달 토글, StatCard에 "즐겨찾기(미제작)" 추가,
+카드 다중선택(체크박스) + 상단 일괄작업 바(제작완료/즐겨찾기 추가·해제/선택 삭제/선택 해제).
+**스키마 v3**: `isFavorite` 필드 추가 + Dexie migration(기존 레코드 false 백필).
 
 실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
@@ -112,6 +112,18 @@
 - [x] 카드 클릭 → 상세 모달: 9:16 썸네일 / URL(열기·복사) / 태그 / 제작 상태 변경 / 메모 수정(인라인) / 삭제
 - [x] 추가 모달: URL 입력 시 플랫폼 자동 추정 배지 표시
 - [x] 수동 검증: 추가/플랫폼 추정·저장(DB v2)/카드·상세 표시/메모 수정/상태 변경/URL 복사/삭제/새로고침 유지
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
+### Phase 4-E — 즐겨찾기 + 다중선택 + 일괄작업 (2026-06-27)
+- [x] 스키마 v3: `VideoItem.isFavorite` 추가, Dexie `db.version(3)` migration(기존 레코드 false 백필)
+      — boolean은 IndexedDB 인덱스 불가라 비인덱스 필드로 두고 메모리 필터 사용
+- [x] 데이터 함수: `setFavorite` / `bulkSetStatus` / `bulkSetFavorite` / `bulkDelete`
+- [x] 카드: 좌상단 선택 체크박스(hover/선택 시), 우상단 즐겨찾기 별 토글, 선택 시 ring 강조
+- [x] 상세 모달: 즐겨찾기 토글 버튼
+- [x] StatCard 추가: "즐겨찾기(미제작)" (isFavorite && status≠done)
+- [x] 일괄작업 바: 전체 선택/해제 · 제작완료 · 즐겨찾기 추가/해제 · 선택 삭제, "N개 선택" 카운트
+- [x] 필터/검색 변경 시 선택 초기화 (Desktop 동일)
+- [x] 수동 검증: 즐겨찾기 토글·StatCard 카운트·다중선택·선택해제·일괄 제작완료·즐겨찾기 추가/해제·선택 삭제·새로고침 유지
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
 ## 미완료 (이후 단계)

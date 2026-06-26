@@ -44,3 +44,20 @@ db.version(2)
         if (!v.platform) v.platform = detectPlatform(v.url ?? "");
       });
   });
+
+// 스키마 v3
+// - videos에 isFavorite 추가(기본 false 백필).
+//   IndexedDB는 boolean을 인덱스 키로 쓸 수 없어 인덱스 목록에는 넣지 않는다(메모리 필터 사용).
+db.version(3)
+  .stores({
+    videos: "id, status, platform, updatedAt, createdAt, *tags",
+    tags: "name, createdAt",
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table<VideoItem>("videos")
+      .toCollection()
+      .modify((v) => {
+        if (v.isFavorite === undefined) v.isFavorite = false;
+      });
+  });

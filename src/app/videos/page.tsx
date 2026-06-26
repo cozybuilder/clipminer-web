@@ -1,8 +1,8 @@
 "use client";
 
 // ClipMiner Web — Video Library.
-// ClipMiner Desktop(v0.1.1) 사용감 재현: 헤더(로고/검색/정렬/추가) + 상단 StatCard 필터 +
-// 보조 태그 필터 라인 + 9:16 쇼츠 카드 그리드 + 추가 모달 + 상세 모달(메모 수정/상태/복사/삭제).
+// ClipMiner Desktop(v0.1.1) 사용감 재현: 헤더 + StatCard 필터(즐겨찾기 포함) + 태그 필터 라인 +
+// 다중선택/일괄작업 + 9:16 쇼츠 카드 그리드 + 추가/상세 모달.
 // 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장/다운로드는 범위 밖.
 
 import Link from "next/link";
@@ -24,6 +24,9 @@ import {
   Tag as TagIcon,
   FileText,
   ExternalLink,
+  Star,
+  StarOff,
+  CheckSquare,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -36,6 +39,10 @@ import {
   deleteVideo,
   listVideos,
   updateVideo,
+  setFavorite,
+  bulkSetStatus,
+  bulkSetFavorite,
+  bulkDelete,
 } from "@/lib/videos";
 import { getThumbnail } from "@/lib/thumbnail";
 import {
@@ -45,7 +52,7 @@ import {
   type Platform,
 } from "@/lib/platform";
 
-type StatusFilter = "all" | VideoStatus;
+type StatusFilter = "all" | VideoStatus | "favorite";
 type SortKey = "updated" | "created" | "title";
 
 const STATUS_BADGE: Record<VideoStatus, string> = {
@@ -97,11 +104,9 @@ function PlatformBadge({ platform }: { platform: Platform }) {
 function CopyButton({
   text,
   label,
-  className,
 }: {
   text: string;
   label?: string;
-  className?: string;
 }) {
   const [copied, setCopied] = useState(false);
   if (!text) return null;
@@ -113,10 +118,7 @@ function CopyButton({
         setCopied(true);
         setTimeout(() => setCopied(false), 1200);
       }}
-      className={
-        className ??
-        "flex items-center gap-1.5 text-xs text-subtext transition-colors hover:text-primary"
-      }
+      className="flex items-center gap-1.5 text-xs text-subtext transition-colors hover:text-primary"
       title="URL 복사"
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -135,6 +137,7 @@ export default function VideoLibraryPage() {
   const [sort, setSort] = useState<SortKey>("updated");
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   async function refresh() {
     setVideos(await listVideos());
@@ -154,6 +157,20 @@ export default function VideoLibraryPage() {
     };
   }, []);
 
+  // 필터/검색이 바뀌면 선택 초기화 (보이지 않는 항목이 선택된 채 남지 않도록)
+  function changeStatusFilter(f: StatusFilter) {
+    setStatusFilter(f);
+    setSelected(new Set());
+  }
+  function changeTagFilter(t: string | null) {
+    setTagFilter(t);
+    setSelected(new Set());
+  }
+  function changeQuery(q: string) {
+    setQuery(q);
+    setSelected(new Set());
+  }
+
   async function handleDelete(id: string) {
     if (!window.confirm("이 영상을 삭제하시겠습니까?")) return;
     await deleteVideo(id);
@@ -171,14 +188,23 @@ export default function VideoLibraryPage() {
     await refresh();
   }
 
+  async function handleToggleFavorite(id: string, value: boolean) {
+    await setFavorite(id, value);
+    await refresh();
+  }
+
   const counts = useMemo(() => {
     const c: Record<StatusFilter, number> = {
       all: videos.length,
       idea: 0,
       in_progress: 0,
       done: 0,
+      favorite: 0,
     };
-    for (const v of videos) c[v.status] += 1;
+    for (const v of videos) {
+      c[v.status] += 1;
+      if (v.isFavorite && v.status !== "done") c.favorite += 1;
+    }
     return c;
   }, [videos]);
 
@@ -192,7 +218,11 @@ export default function VideoLibraryPage() {
   const results = useMemo(() => {
     const q = norm(query);
     const filtered = videos.filter((v) => {
-      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (statusFilter === "favorite") {
+        if (!v.isFavorite || v.status === "done") return false;
+      } else if (statusFilter !== "all" && v.status !== statusFilter) {
+        return false;
+      }
       if (tagFilter && !v.tags.includes(tagFilter)) return false;
       if (q) {
         const hay = norm([v.title, v.url, v.note, ...v.tags].join(" "));
@@ -207,6 +237,43 @@ export default function VideoLibraryPage() {
     else sorted.sort((a, b) => a.title.localeCompare(b.title, "ko"));
     return sorted;
   }, [videos, statusFilter, tagFilter, query, sort]);
+
+  // ── 다중선택 ──
+  const visibleIds = results.map((v) => v.id);
+  const allSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    setSelected(allSelected ? new Set() : new Set(visibleIds));
+  }
+  async function handleBulkProduced() {
+    if (selected.size === 0) return;
+    await bulkSetStatus([...selected], "done");
+    setSelected(new Set());
+    await refresh();
+  }
+  async function handleBulkFavorite(value: boolean) {
+    if (selected.size === 0) return;
+    await bulkSetFavorite([...selected], value);
+    setSelected(new Set());
+    await refresh();
+  }
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`선택한 영상 ${selected.size}개를 삭제하시겠습니까?`))
+      return;
+    await bulkDelete([...selected]);
+    setSelected(new Set());
+    await refresh();
+  }
 
   const stats: {
     key: StatusFilter;
@@ -225,6 +292,7 @@ export default function VideoLibraryPage() {
       label: VIDEO_STATUS_LABELS.done,
       icon: <CheckCircle2 size={18} />,
     },
+    { key: "favorite", label: "즐겨찾기(미제작)", icon: <Star size={18} /> },
   ];
 
   const activeLabel = stats.find((s) => s.key === statusFilter)?.label;
@@ -253,7 +321,7 @@ export default function VideoLibraryPage() {
               type="text"
               placeholder="제목·태그·메모 검색..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => changeQuery(e.target.value)}
               className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-4 text-sm text-text placeholder:text-subtext transition-colors focus:border-primary/60 focus:outline-none"
             />
           </div>
@@ -289,7 +357,7 @@ export default function VideoLibraryPage() {
       {/* ───────── 메인 ───────── */}
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-6 py-6">
         {/* StatCard 필터 */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {stats.map((s) => (
             <StatCard
               key={s.key}
@@ -297,7 +365,7 @@ export default function VideoLibraryPage() {
               value={counts[s.key]}
               icon={s.icon}
               active={statusFilter === s.key}
-              onClick={() => setStatusFilter(s.key)}
+              onClick={() => changeStatusFilter(s.key)}
             />
           ))}
         </div>
@@ -309,7 +377,7 @@ export default function VideoLibraryPage() {
               태그
             </span>
             <button
-              onClick={() => setTagFilter(null)}
+              onClick={() => changeTagFilter(null)}
               className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                 tagFilter === null
                   ? "border-primary bg-primary/15 text-primary"
@@ -321,7 +389,7 @@ export default function VideoLibraryPage() {
             {tagList.map(([name, n]) => (
               <button
                 key={name}
-                onClick={() => setTagFilter(tagFilter === name ? null : name)}
+                onClick={() => changeTagFilter(tagFilter === name ? null : name)}
                 className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                   tagFilter === name
                     ? "border-primary bg-primary/15 text-primary"
@@ -334,12 +402,54 @@ export default function VideoLibraryPage() {
           </div>
         )}
 
-        {/* 결과 카운트 */}
-        <div className="flex items-center justify-between">
+        {/* 결과 카운트 + 일괄 작업 바 */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-subtext">
-            {query ? `검색 결과 ${results.length}개` : `${activeLabel} ${results.length}개`}
+            {query ? `검색 결과 ${results.length}개` : `${activeLabel}영상 ${results.length}개`}
             {tagFilter && <span className="text-primary"> · #{tagFilter}</span>}
+            {selected.size > 0 && (
+              <span className="text-primary"> · {selected.size}개 선택</span>
+            )}
           </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {results.length > 0 && (
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
+              >
+                <CheckSquare size={14} />
+                {allSelected ? "선택 해제" : "전체 선택"}
+              </button>
+            )}
+            {selected.size > 0 && (
+              <>
+                <button
+                  onClick={handleBulkProduced}
+                  className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/20"
+                >
+                  <CheckCircle2 size={14} /> 제작완료
+                </button>
+                <button
+                  onClick={() => handleBulkFavorite(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-primary/50 hover:text-primary"
+                >
+                  <Star size={14} /> 즐겨찾기 추가
+                </button>
+                <button
+                  onClick={() => handleBulkFavorite(false)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-subtext transition-colors hover:border-border/80 hover:text-text"
+                >
+                  <StarOff size={14} /> 즐겨찾기 해제
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/25"
+                >
+                  <Trash2 size={14} /> 선택 삭제 ({selected.size})
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* 그리드 */}
@@ -364,10 +474,12 @@ export default function VideoLibraryPage() {
               <VideoCard
                 key={v.id}
                 video={v}
+                selected={selected.has(v.id)}
+                onToggleSelect={toggleSelect}
+                onToggleFavorite={handleToggleFavorite}
                 onOpen={setDetailId}
-                onDelete={handleDelete}
                 onStatusChange={handleStatusChange}
-                onTagClick={setTagFilter}
+                onTagClick={changeTagFilter}
               />
             ))}
           </div>
@@ -390,6 +502,7 @@ export default function VideoLibraryPage() {
           onClose={() => setDetailId(null)}
           onStatusChange={handleStatusChange}
           onMemoSave={handleMemoSave}
+          onToggleFavorite={handleToggleFavorite}
           onDelete={handleDelete}
         />
       )}
@@ -436,14 +549,18 @@ function StatCard({
 // ───────── 영상 카드 (9:16 쇼츠형, 클릭 시 상세) ─────────
 function VideoCard({
   video,
+  selected,
+  onToggleSelect,
+  onToggleFavorite,
   onOpen,
-  onDelete,
   onStatusChange,
   onTagClick,
 }: {
   video: VideoItem;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onToggleFavorite: (id: string, value: boolean) => void;
   onOpen: (id: string) => void;
-  onDelete: (id: string) => void;
   onStatusChange: (id: string, s: VideoStatus) => void;
   onTagClick: (t: string) => void;
 }) {
@@ -453,7 +570,11 @@ function VideoCard({
   return (
     <div
       onClick={() => onOpen(video.id)}
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-card border border-border bg-card transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
+      className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-card border bg-card transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 ${
+        selected
+          ? "border-primary ring-2 ring-primary/50"
+          : "border-border hover:border-primary/50"
+      }`}
     >
       {/* 썸네일 (카드 중심) */}
       <div className="relative aspect-[9/16] overflow-hidden bg-border">
@@ -469,29 +590,48 @@ function VideoCard({
           <ThumbPlaceholder />
         )}
 
-        {/* 상태 배지 (좌상단) */}
-        <span
-          className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[video.status]}`}
+        {/* 선택 체크박스 (좌상단) */}
+        <button
+          onClick={(e) => {
+            stop(e);
+            onToggleSelect(video.id);
+          }}
+          className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
+            selected
+              ? "border-primary bg-primary text-white opacity-100"
+              : "border-white/70 bg-black/40 text-transparent opacity-0 group-hover:opacity-100"
+          }`}
+          title={selected ? "선택 해제" : "선택"}
         >
-          {VIDEO_STATUS_LABELS[video.status]}
-        </span>
+          <Check size={14} />
+        </button>
 
-        {/* 플랫폼 배지 (좌하단, Desktop과 동일 위치) */}
+        {/* 즐겨찾기 (우상단) */}
+        <button
+          onClick={(e) => {
+            stop(e);
+            onToggleFavorite(video.id, !video.isFavorite);
+          }}
+          className="absolute right-2 top-2 rounded-full bg-black/40 p-1.5 backdrop-blur-sm transition-colors hover:bg-black/60"
+          title={video.isFavorite ? "즐겨찾기 해제" : "즐겨찾기"}
+        >
+          <Star
+            size={16}
+            className={video.isFavorite ? "fill-primary text-primary" : "text-white/70"}
+          />
+        </button>
+
+        {/* 플랫폼 배지 (좌하단) */}
         <div className="absolute bottom-2 left-2">
           <PlatformBadge platform={video.platform} />
         </div>
 
-        {/* 삭제 (우상단, hover 시) */}
-        <button
-          onClick={(e) => {
-            stop(e);
-            onDelete(video.id);
-          }}
-          className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white/80 opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white group-hover:opacity-100"
-          title="삭제"
+        {/* 상태 배지 (우하단) */}
+        <span
+          className={`absolute bottom-2 right-2 rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[video.status]}`}
         >
-          <Trash2 size={14} />
-        </button>
+          {VIDEO_STATUS_LABELS[video.status]}
+        </span>
       </div>
 
       {/* 정보 */}
@@ -568,12 +708,14 @@ function DetailModal({
   onClose,
   onStatusChange,
   onMemoSave,
+  onToggleFavorite,
   onDelete,
 }: {
   video: VideoItem;
   onClose: () => void;
   onStatusChange: (id: string, s: VideoStatus) => void;
   onMemoSave: (id: string, note: string) => void;
+  onToggleFavorite: (id: string, value: boolean) => void;
   onDelete: (id: string) => void;
 }) {
   const thumb = getThumbnail(video.url);
@@ -608,12 +750,25 @@ function DetailModal({
               {VIDEO_STATUS_LABELS[video.status]}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onToggleFavorite(video.id, !video.isFavorite)}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors ${
+                video.isFavorite
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-border bg-card text-subtext hover:text-text"
+              }`}
+            >
+              <Star size={15} className={video.isFavorite ? "fill-primary" : ""} />
+              {video.isFavorite ? "즐겨찾기 해제" : "즐겨찾기"}
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 md:grid-cols-[260px_1fr]">

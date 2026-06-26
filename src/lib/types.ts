@@ -34,6 +34,8 @@ export interface VideoItem {
   note: string;
   /** 제작 상태 */
   status: VideoStatus;
+  /** 즐겨찾기 여부 (schema v3) */
+  isFavorite: boolean;
   /** 생성 시각 (epoch ms) */
   createdAt: number;
   /** 수정 시각 (epoch ms) */

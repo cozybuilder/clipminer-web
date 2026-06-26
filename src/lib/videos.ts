@@ -27,6 +27,7 @@ export async function addVideo(input: NewVideoInput): Promise<VideoItem> {
     tags,
     note: input.note,
     status: input.status,
+    isFavorite: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -67,4 +68,44 @@ export async function updateVideo(
 /** 영상 삭제 */
 export async function deleteVideo(id: string): Promise<void> {
   await db.videos.delete(id);
+}
+
+/** 즐겨찾기 토글/설정 */
+export async function setFavorite(
+  id: string,
+  value: boolean,
+): Promise<void> {
+  await db.videos.update(id, { isFavorite: value, updatedAt: Date.now() });
+}
+
+/** 여러 영상 상태 일괄 변경 */
+export async function bulkSetStatus(
+  ids: string[],
+  status: VideoItem["status"],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const now = Date.now();
+  await db.videos
+    .where("id")
+    .anyOf(ids)
+    .modify({ status, updatedAt: now });
+}
+
+/** 여러 영상 즐겨찾기 일괄 변경 */
+export async function bulkSetFavorite(
+  ids: string[],
+  value: boolean,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const now = Date.now();
+  await db.videos
+    .where("id")
+    .anyOf(ids)
+    .modify({ isFavorite: value, updatedAt: now });
+}
+
+/** 여러 영상 일괄 삭제 */
+export async function bulkDelete(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.videos.bulkDelete(ids);
 }
