@@ -1,14 +1,14 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 1 진행 중)
+> 최종 갱신: 2026-06-27 (Phase 1.5 문서 정합화 완료)
 
 ---
 
 ## 현재 단계
 
-**Phase 1 — Next.js 초기화**
+**Phase 1 완료 + Phase 1.5(문서 정합화) 완료.** 다음 단계는 **Phase 2 Vercel 기본 배포**.
 
-웹 앱 골격을 구성하는 단계. Supabase/인증/수집 기능은 아직 구현하지 않는다.
+웹 앱 골격(기본 페이지)까지 구성됨. Supabase/인증/DB/수집 기능은 아직 구현하지 않는다.
 
 ---
 
@@ -33,16 +33,27 @@
 - [x] 기본 페이지 생성 (`src/app/page.tsx` — ClipMiner Web 골격)
 - [x] 기존 문서(README/CLAUDE/docs) 보존
 - [x] 검증: `npm install` / `npm run lint` / `npm run build` 통과
+- [x] 커밋/푸시 (commit `4f0355c` → `origin/main`)
 
 > 스택: Next.js 16.2.9 · React 19.2.4 · Tailwind v4 · TypeScript 5
 
+### Phase 1.5 — 문서 정합화 (2026-06-27)
+- [x] CLAUDE.md 현재 단계 → Phase 1 완료 / 다음 Phase 2 명시
+- [x] README.md → 실제 Next.js 구조 · 실행 명령 · 미구현 상태 반영
+- [x] AGENTS.md 삭제 (create-next-app 기본 생성물) — 기준 문서를 CLAUDE.md + docs/ 로 통일
+- [x] docs/STATUS.md · docs/ROADMAP.md 정합화
+
 ## 미완료 (이후 단계)
 
+### Phase 2 — Vercel 기본 배포 (다음)
+- [ ] Vercel 프로젝트 연결 및 기본 배포
+- [ ] 도메인 연결 준비 (clipminer.cozybuilder.co.kr)
+
+### Phase 3+ — 데이터/세션/수집 (MVP)
 - [ ] Supabase 독립 프로젝트 생성 및 환경변수 확정
 - [ ] DB 마이그레이션 작성 (`videos` 테이블)
 - [ ] `cm_session` 발급/검증 연동 (homepage `/apps/clipminer` 진입 흐름)
 - [ ] 영상 등록/목록/조회/삭제 기능 구현
-- [ ] Vercel 배포 및 도메인 연결 (clipminer.cozybuilder.co.kr)
 
 ---
 
@@ -51,9 +62,7 @@
 - 작업 폴더: `C:\projects\clipminer-web`
 - Git 저장소 초기화 완료, `origin` = https://github.com/cozybuilder/clipminer-web.git
 - Phase 1에서 추가된 의존성은 `node_modules/`(gitignore)로 관리.
-
-> 참고: `CLAUDE.md`의 "현재 단계" 표기는 Phase 0 작성 시점 기준이며,
-> Phase 1 전환 사실은 본 STATUS 문서를 기준으로 한다.
+- 에이전트 기준 문서는 `CLAUDE.md` + `docs/` 로 통일 (AGENTS.md 제거됨).
 
 ---
 

@@ -14,17 +14,18 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 
 ## 1. 현재 단계
 
-**Phase 0 — 설계 문서 안착.** 앱은 아직 구현하지 않는다.
+**Phase 1 완료 — Next.js 초기화 완료.** 다음 단계는 **Phase 2 Vercel 기본 배포 준비**.
 
-Phase 0 제약 (이 단계에서 금지):
-- 앱 구현 금지
-- Next.js 초기화 금지
-- Supabase 마이그레이션 작성 금지
-- 코드 작성 금지
-- **문서만 작성**
-- commit / push는 작성 완료 후 **보고하고 승인받은 뒤** 진행
+진행 이력:
+- Phase 0 ✅ 설계 문서 안착 (commit `9485137`)
+- Phase 1 ✅ Next.js 16 + TypeScript + App Router + Tailwind v4 초기화 (commit `4f0355c`)
+- Phase 1.5 ✅ 문서 정합화
+- **다음 → Phase 2: Vercel 기본 배포 준비**
 
-> Phase 1로 넘어가면 위 금지는 해제된다. 단계 전환은 사장님 승인으로만 한다.
+현재까지 구현 범위: 앱 골격(기본 페이지)만 존재.
+**Supabase / 인증 / DB / cm_session / 수집 기능은 아직 미구현**이며, 별도 승인된 단계에서 진행한다.
+
+> 단계 전환·기능 추가는 사장님 승인으로만 한다. 세부 진행 상태는 [docs/STATUS.md](docs/STATUS.md) 기준.
 
 ---
 
@@ -61,7 +62,13 @@ Phase 0 제약 (이 단계에서 금지):
 
 ---
 
-## 5. 환경
+## 5. 환경 / 스택
 
 - OS: Windows / Shell: PowerShell (POSIX 스크립트는 Bash 도구)
 - 작업 폴더: `C:\projects\clipminer-web`
+- 스택: Next.js 16.2.9 · React 19.2.4 · TypeScript 5 · Tailwind v4 · App Router (`src/` 구조)
+- 실행: `npm install` → `npm run dev` / `npm run lint` / `npm run build`
+
+> Next.js 16은 이전 버전과 API·규약·파일 구조가 다를 수 있다. 코드 작성 전
+> `node_modules/next/dist/docs/`의 관련 가이드를 확인하고 deprecation 안내를 따른다.
+> (이 저장소의 에이전트 기준 문서는 **CLAUDE.md + docs/** 로 통일한다.)
