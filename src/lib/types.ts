@@ -3,11 +3,11 @@
 /** 영상 제작 상태 */
 export type VideoStatus = "idea" | "in_progress" | "done";
 
-/** 상태 표시 라벨 (UI 용) */
+/** 상태 표시 라벨 (UI 용) — ClipMiner Desktop 표기 기준 */
 export const VIDEO_STATUS_LABELS: Record<VideoStatus, string> = {
-  idea: "아이디어",
-  in_progress: "진행 중",
-  done: "완료",
+  idea: "미제작",
+  in_progress: "제작중",
+  done: "제작완료",
 };
 
 /** 선택 가능한 상태 목록 (UI 셀렉트 순서 기준) */

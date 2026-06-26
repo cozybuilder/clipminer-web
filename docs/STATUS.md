@@ -1,15 +1,15 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 4 Video Library UI MVP)
+> 최종 갱신: 2026-06-27 (Phase 4-B Desktop 레이아웃 이식)
 
 ---
 
 ## 현재 단계
 
-**Phase 4 — Video Library UI(MVP) 완료.**
-`/videos`를 정식 라이브러리 화면으로 개선: 등록 폼 + 카드 목록 + 상태 필터 + 검색 +
-카드 내 상태 변경 + 빈 상태 UI. 루트(`/`)에 라이브러리 진입 버튼 추가.
-데이터는 IndexedDB에 영속(추가/조회/수정/삭제/새로고침 유지 검증 완료).
+**Phase 4-B — ClipMiner Desktop(v0.1.1) 보드형 UI 이식 완료.**
+`/videos`를 Desktop과 동일한 다크 보드형으로 재구성: 좌측 필터 사이드바(제작 상태/태그) +
+상단 툴바(검색/정렬/영상 추가) + 9:16 쇼츠 카드 그리드 + 추가 모달.
+데이터 계층(IndexedDB/Dexie)은 그대로 유지(스키마 무변경), 상태 라벨만 Desktop 표기로.
 
 실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
@@ -84,10 +84,23 @@
 - [x] 수동 검증: 추가/조회/상태변경/필터/검색/삭제/새로고침 유지 확인
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
+### Phase 4-B — ClipMiner Desktop 보드형 UI 이식 (2026-06-27)
+- [x] Desktop 디자인 토큰 이식 (globals.css `@theme`: background/card/border/primary/accent/text/subtext, radius-card)
+- [x] lucide-react 아이콘 도입 (Desktop과 동일)
+- [x] 좌측 사이드바: 제작 상태 필터(전체/미제작/제작중/제작완료, 카운트) + 태그 필터(빈도순)
+- [x] 상단 툴바: 검색 + 정렬(최근수정/오래된/제목) + "영상 추가"(모달)
+- [x] 9:16 쇼츠 카드 그리드 (2~6열 반응형), 썸네일 중심 + URL 자동 썸네일(유튜브) + No Preview 플레이스홀더
+- [x] 카드: 상태 배지(색상) / 태그칩 / 메모 / 상태 즉시 변경 / 삭제
+- [x] 영상 추가 모달 (URL/제목/태그/메모/상태) — 등록 폼이 화면을 차지하지 않음
+- [x] 상태 라벨 Desktop 표기로 변경 (미제작/제작중/제작완료) — 스키마 값(idea/in_progress/done) 무변경
+- [x] 수동 검증: 추가/썸네일/상태변경/상태필터/태그필터/검색/삭제/새로고침 유지
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
 ## 미완료 (이후 단계)
 
 ### Phase 5 — 영상 파일 / 데이터 이동
 - [ ] 로컬 폴더 지정 + 실제 영상 파일 저장/참조 (File System Access API 등)
+- [ ] 카드 hover 시 로컬 영상 미리보기(Desktop의 hover 재생) — 파일 저장 이후
 - [ ] 영상 편집(수정) UI (현재는 상태 변경 + 삭제만)
 
 ### 이후 (선택적)

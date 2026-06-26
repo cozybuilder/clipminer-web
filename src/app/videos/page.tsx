@@ -1,11 +1,21 @@
 "use client";
 
-// ClipMiner Web — Video Library (MVP).
-// Local-First: 모든 데이터는 브라우저 IndexedDB(Dexie)에 저장된다.
-// 실제 영상 파일 저장 / File System Access / Import-Export 는 범위 밖.
+// ClipMiner Web — Video Library.
+// ClipMiner Desktop(v0.1.1)의 보드형 레이아웃/디자인을 Web으로 이식.
+// 좌측 필터 사이드바 + 상단 툴바(검색/정렬/추가) + 9:16 쇼츠 카드 그리드 + 추가 모달.
+// 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장은 범위 밖.
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Film,
+  Search,
+  Plus,
+  Trash2,
+  X,
+  Tag as TagIcon,
+  ArrowDownUp,
+} from "lucide-react";
 import {
   VIDEO_STATUSES,
   VIDEO_STATUS_LABELS,
@@ -18,8 +28,18 @@ import {
   listVideos,
   updateVideo,
 } from "@/lib/videos";
+import { getThumbnail } from "@/lib/thumbnail";
 
 type StatusFilter = "all" | VideoStatus;
+type SortKey = "updated" | "created" | "title";
+
+const STATUS_BADGE: Record<VideoStatus, string> = {
+  idea: "bg-subtext/15 text-subtext border-subtext/30",
+  in_progress: "bg-accent/15 text-accent border-accent/30",
+  done: "bg-primary/20 text-primary border-primary/40",
+};
+
+const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 
 function parseTags(raw: string): string[] {
   return raw
@@ -29,36 +49,22 @@ function parseTags(raw: string): string[] {
 }
 
 function formatDate(ms: number): string {
-  return new Date(ms).toLocaleString("ko-KR", {
+  return new Date(ms).toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
-
-const STATUS_BADGE: Record<VideoStatus, string> = {
-  idea: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  in_progress:
-    "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-};
 
 export default function VideoLibraryPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 등록 폼
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [tags, setTags] = useState("");
-  const [note, setNote] = useState("");
-  const [status, setStatus] = useState<VideoStatus>("idea");
-
-  // 필터 / 검색
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("updated");
+  const [adding, setAdding] = useState(false);
 
   async function refresh() {
     setVideos(await listVideos());
@@ -78,19 +84,8 @@ export default function VideoLibraryPage() {
     };
   }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim() && !url.trim()) return;
-    await addVideo({ url, title, tags: parseTags(tags), note, status });
-    setUrl("");
-    setTitle("");
-    setTags("");
-    setNote("");
-    setStatus("idea");
-    await refresh();
-  }
-
   async function handleDelete(id: string) {
+    if (!window.confirm("이 영상을 삭제하시겠습니까?")) return;
     await deleteVideo(id);
     await refresh();
   }
@@ -100,18 +95,7 @@ export default function VideoLibraryPage() {
     await refresh();
   }
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return videos.filter((v) => {
-      if (statusFilter !== "all" && v.status !== statusFilter) return false;
-      if (!q) return true;
-      const haystack = [v.title, v.url, v.note, ...v.tags]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [videos, statusFilter, query]);
-
+  // 상태 카운트
   const counts = useMemo(() => {
     const c: Record<StatusFilter, number> = {
       all: videos.length,
@@ -123,7 +107,35 @@ export default function VideoLibraryPage() {
     return c;
   }, [videos]);
 
-  const filterTabs: { key: StatusFilter; label: string }[] = [
+  // 태그 목록 (빈도순)
+  const tagList = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of videos)
+      for (const t of v.tags) map.set(t, (map.get(t) ?? 0) + 1);
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [videos]);
+
+  // 필터 + 검색 + 정렬
+  const results = useMemo(() => {
+    const q = norm(query);
+    const filtered = videos.filter((v) => {
+      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (tagFilter && !v.tags.includes(tagFilter)) return false;
+      if (q) {
+        const hay = norm([v.title, v.url, v.note, ...v.tags].join(" "));
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const sorted = [...filtered];
+    if (sort === "updated") sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+    else if (sort === "created")
+      sorted.sort((a, b) => a.createdAt - b.createdAt);
+    else sorted.sort((a, b) => a.title.localeCompare(b.title, "ko"));
+    return sorted;
+  }, [videos, statusFilter, tagFilter, query, sort]);
+
+  const statusNav: { key: StatusFilter; label: string }[] = [
     { key: "all", label: "전체" },
     { key: "idea", label: VIDEO_STATUS_LABELS.idea },
     { key: "in_progress", label: VIDEO_STATUS_LABELS.in_progress },
@@ -131,226 +143,453 @@ export default function VideoLibraryPage() {
   ];
 
   return (
-    <div className="min-h-screen">
-      {/* 헤더 */}
-      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-black/60">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-baseline gap-3">
-            <Link href="/" className="text-lg font-semibold tracking-tight">
-              ClipMiner Web
-            </Link>
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              Local Library · {videos.length}개 (이 브라우저에 저장)
-            </span>
+    <div className="flex min-h-screen bg-background text-text">
+      {/* ───────── 좌측 사이드바 (필터) ───────── */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-background md:flex">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 px-5 py-5"
+          title="홈으로"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Film size={16} className="text-white" />
           </div>
-          <Link
-            href="/"
-            className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            ← 홈
-          </Link>
-        </div>
-      </header>
+          <span className="text-lg font-semibold tracking-tight">ClipMiner</span>
+        </Link>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
-        <div className="grid gap-8 md:grid-cols-[320px_1fr]">
-          {/* 등록 폼 */}
-          <aside className="md:sticky md:top-24 md:self-start">
-            <h2 className="text-sm font-medium uppercase tracking-widest text-zinc-400">
-              영상 등록
-            </h2>
-            <form
-              onSubmit={handleSave}
-              className="mt-3 flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+        <nav className="px-3">
+          <p className="px-2 pb-2 text-xs font-medium uppercase tracking-widest text-subtext">
+            제작 상태
+          </p>
+          {statusNav.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setStatusFilter(item.key)}
+              className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                statusFilter === item.key
+                  ? "bg-primary/15 text-primary"
+                  : "text-subtext hover:bg-card hover:text-text"
+              }`}
             >
-              <input
-                className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                placeholder="영상 URL"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
+              <span>{item.label}</span>
+              <span className="text-xs opacity-70">{counts[item.key]}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="mt-4 px-3">
+          <p className="flex items-center gap-1.5 px-2 pb-2 text-xs font-medium uppercase tracking-widest text-subtext">
+            <TagIcon size={12} /> 태그
+          </p>
+          {tagList.length === 0 ? (
+            <p className="px-3 text-xs text-subtext/60">태그 없음</p>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {tagFilter && (
+                <button
+                  onClick={() => setTagFilter(null)}
+                  className="mb-1 self-start px-3 text-xs text-subtext hover:text-text"
+                >
+                  ✕ 태그 필터 해제
+                </button>
+              )}
+              {tagList.map(([name, n]) => (
+                <button
+                  key={name}
+                  onClick={() => setTagFilter(tagFilter === name ? null : name)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                    tagFilter === name
+                      ? "bg-primary/15 text-primary"
+                      : "text-subtext hover:bg-card hover:text-text"
+                  }`}
+                >
+                  <span className="truncate">#{name}</span>
+                  <span className="text-xs opacity-70">{n}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* ───────── 메인 ───────── */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* 상단 툴바 */}
+        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
+          <div className="flex items-center gap-3 px-6 py-4">
+            <Link href="/" className="md:hidden" title="홈">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                <Film size={16} className="text-white" />
+              </div>
+            </Link>
+
+            <div className="relative max-w-md flex-1">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
               />
               <input
-                className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                placeholder="제목 (직접 입력)"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                type="text"
+                placeholder="제목·태그·메모 검색..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-4 text-sm text-text placeholder:text-subtext transition-colors focus:border-primary/60 focus:outline-none"
               />
-              <input
-                className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                placeholder="태그 (쉼표로 구분)"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-              />
-              <textarea
-                className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                placeholder="메모"
-                rows={3}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="relative hidden sm:block">
+              <ArrowDownUp
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
               />
               <select
-                className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as VideoStatus)}
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="appearance-none rounded-xl border border-border bg-card py-2 pl-8 pr-8 text-sm text-text transition-colors focus:border-primary/60 focus:outline-none"
               >
-                {VIDEO_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {VIDEO_STATUS_LABELS[s]}
-                  </option>
-                ))}
+                <option value="updated">최근 수정순</option>
+                <option value="created">등록 오래된순</option>
+                <option value="title">제목순</option>
               </select>
-              <button
-                type="submit"
-                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                저장
-              </button>
-            </form>
-          </aside>
+            </div>
 
-          {/* 목록 영역 */}
-          <section>
-            {/* 필터 + 검색 */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-1">
-                {filterTabs.map((tab) => (
+            <button
+              onClick={() => setAdding(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              <Plus size={15} />
+              영상 추가
+            </button>
+          </div>
+        </header>
+
+        {/* 결과 카운트 */}
+        <div className="px-6 pt-5">
+          <p className="text-sm text-subtext">
+            {query
+              ? `검색 결과 ${results.length}개`
+              : `${statusNav.find((s) => s.key === statusFilter)?.label} ${results.length}개`}
+            {tagFilter && <span className="text-primary"> · #{tagFilter}</span>}
+          </p>
+        </div>
+
+        {/* 그리드 */}
+        <main className="flex-1 px-6 py-5">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-subtext">
+              <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+              <p className="text-sm">영상 로딩 중...</p>
+            </div>
+          ) : videos.length === 0 ? (
+            <EmptyState
+              title="아직 저장된 영상이 없습니다"
+              desc="우측 상단 ‘영상 추가’로 첫 영상을 등록하세요. 데이터는 이 브라우저에 저장됩니다."
+            />
+          ) : results.length === 0 ? (
+            <EmptyState
+              title="조건에 맞는 영상이 없습니다"
+              desc="다른 키워드나 필터를 시도해보세요"
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {results.map((v) => (
+                <VideoCard
+                  key={v.id}
+                  video={v}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                  onTagClick={setTagFilter}
+                />
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {adding && (
+        <AddVideoModal
+          onClose={() => setAdding(false)}
+          onSaved={async () => {
+            setAdding(false);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ───────── 영상 카드 (9:16 쇼츠형) ─────────
+function VideoCard({
+  video,
+  onDelete,
+  onStatusChange,
+  onTagClick,
+}: {
+  video: VideoItem;
+  onDelete: (id: string) => void;
+  onStatusChange: (id: string, s: VideoStatus) => void;
+  onTagClick: (t: string) => void;
+}) {
+  const thumb = getThumbnail(video.url);
+
+  return (
+    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+      {/* 썸네일 (카드 중심) */}
+      <div className="relative aspect-[9/16] overflow-hidden bg-border">
+        {video.url ? (
+          // 외부 썸네일/링크 — next/image 대신 일반 img (도메인 비고정)
+          <a href={video.url} target="_blank" rel="noopener noreferrer">
+            {thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumb}
+                alt={video.title}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            ) : (
+              <ThumbPlaceholder />
+            )}
+          </a>
+        ) : (
+          <ThumbPlaceholder />
+        )}
+
+        {/* 상태 배지 (좌상단) */}
+        <span
+          className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[video.status]}`}
+        >
+          {VIDEO_STATUS_LABELS[video.status]}
+        </span>
+
+        {/* 삭제 (우상단, hover 시) */}
+        <button
+          onClick={() => onDelete(video.id)}
+          className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white/80 opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white group-hover:opacity-100"
+          title="삭제"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      {/* 정보 */}
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        <p className="line-clamp-2 text-sm font-medium leading-snug text-text">
+          {video.title || "(제목 없음)"}
+        </p>
+
+        {video.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {video.tags.map((t) => (
+              <button
+                key={t}
+                onClick={() => onTagClick(t)}
+                className="rounded bg-background px-1.5 py-0.5 text-xs text-subtext transition-colors hover:text-primary"
+              >
+                #{t}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {video.note && (
+          <p className="line-clamp-2 text-xs leading-relaxed text-subtext">
+            {video.note}
+          </p>
+        )}
+
+        {/* 상태 빠른 변경 + 날짜 */}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+          <select
+            value={video.status}
+            onChange={(e) =>
+              onStatusChange(video.id, e.target.value as VideoStatus)
+            }
+            className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-text focus:border-primary/60 focus:outline-none"
+            title="상태 변경"
+          >
+            {VIDEO_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {VIDEO_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-subtext/60">
+            {formatDate(video.createdAt)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThumbPlaceholder() {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-subtext/40">
+      <Film size={28} />
+      <span className="text-xs">No Preview</span>
+    </div>
+  );
+}
+
+// ───────── 영상 추가 모달 ─────────
+function AddVideoModal({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [note, setNote] = useState("");
+  const [status, setStatus] = useState<VideoStatus>("idea");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!url.trim() && !title.trim()) {
+      setError("URL 또는 제목 중 하나는 입력해주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await addVideo({ url, title, tags: parseTags(tags), note, status });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col rounded-card border border-border bg-card shadow-2xl shadow-black/40">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-5">
+          <h2 className="text-lg font-semibold text-text">영상 추가</h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="space-y-4 px-6 py-5">
+            <Field label="영상 URL">
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://youtu.be/..."
+                className={inputCls}
+              />
+            </Field>
+            <Field label="제목">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="영상 제목 (직접 입력)"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="태그">
+              <input
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="주방, 리뷰, 쇼츠"
+                className={inputCls}
+              />
+              <p className="mt-1 text-xs text-subtext/50">쉼표(,)로 구분합니다</p>
+            </Field>
+            <Field label="메모">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="이 영상에 대한 메모..."
+                rows={3}
+                className={`${inputCls} resize-none leading-relaxed`}
+              />
+            </Field>
+            <Field label="제작 상태">
+              <div className="flex gap-2">
+                {VIDEO_STATUSES.map((s) => (
                   <button
-                    key={tab.key}
-                    onClick={() => setStatusFilter(tab.key)}
-                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                      statusFilter === tab.key
-                        ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    key={s}
+                    type="button"
+                    onClick={() => setStatus(s)}
+                    className={`flex-1 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+                      status === s
+                        ? "border-primary bg-primary text-white"
+                        : "border-border bg-background text-subtext hover:text-text"
                     }`}
                   >
-                    {tab.label} ({counts[tab.key]})
+                    {VIDEO_STATUS_LABELS[s]}
                   </button>
                 ))}
               </div>
-              <input
-                className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900 sm:w-56"
-                placeholder="제목·태그·메모 검색"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
+            </Field>
 
-            {/* 카드 목록 / 빈 상태 */}
-            <div className="mt-5">
-              {loading ? (
-                <p className="text-sm text-zinc-500">불러오는 중…</p>
-              ) : videos.length === 0 ? (
-                <EmptyState
-                  title="아직 저장된 영상이 없습니다"
-                  desc="왼쪽 폼에서 첫 영상을 등록해 보세요. 데이터는 이 브라우저에만 저장됩니다."
-                />
-              ) : filtered.length === 0 ? (
-                <EmptyState
-                  title="조건에 맞는 영상이 없습니다"
-                  desc="필터나 검색어를 바꿔 보세요."
-                />
-              ) : (
-                <ul className="flex flex-col gap-3">
-                  {filtered.map((v) => (
-                    <li
-                      key={v.id}
-                      className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                            {v.title || "(제목 없음)"}
-                          </p>
-                          {v.url && (
-                            <a
-                              href={v.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
-                            >
-                              {v.url}
-                            </a>
-                          )}
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[v.status]}`}
-                        >
-                          {VIDEO_STATUS_LABELS[v.status]}
-                        </span>
-                      </div>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+          </div>
 
-                      {v.tags.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {v.tags.map((t) => (
-                            <button
-                              key={t}
-                              onClick={() => setQuery(t)}
-                              className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                            >
-                              #{t}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+          <div className="flex shrink-0 gap-3 border-t border-border px-6 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-subtext transition-colors hover:text-text"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              <Plus size={15} />
+              {saving ? "저장 중..." : "영상 추가"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
-                      {v.note && (
-                        <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
-                          {v.note}
-                        </p>
-                      )}
+const inputCls =
+  "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-text placeholder:text-subtext/50 transition-colors focus:border-primary/60 focus:outline-none";
 
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs text-zinc-400">상태</label>
-                          <select
-                            value={v.status}
-                            onChange={(e) =>
-                              handleStatusChange(
-                                v.id,
-                                e.target.value as VideoStatus,
-                              )
-                            }
-                            className="rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                          >
-                            {VIDEO_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {VIDEO_STATUS_LABELS[s]}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs text-zinc-400">
-                            생성 {formatDate(v.createdAt)}
-                            {v.updatedAt !== v.createdAt && (
-                              <> · 수정 {formatDate(v.updatedAt)}</>
-                            )}
-                          </span>
-                          <button
-                            onClick={() => handleDelete(v.id)}
-                            className="text-xs text-red-600 hover:underline dark:text-red-400"
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-        </div>
-      </main>
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs text-subtext">{label}</label>
+      {children}
     </div>
   );
 }
 
 function EmptyState({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-      <p className="font-medium text-zinc-700 dark:text-zinc-300">{title}</p>
-      <p className="mt-1 text-sm text-zinc-500">{desc}</p>
+    <div className="flex flex-col items-center justify-center py-24 text-subtext">
+      <Film size={48} className="mb-4 opacity-30" />
+      <p className="text-lg font-medium">{title}</p>
+      <p className="mt-1 text-sm opacity-70">{desc}</p>
     </div>
   );
 }
