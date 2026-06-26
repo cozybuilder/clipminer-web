@@ -97,7 +97,7 @@
       reportSave("done", { title: r.title });
     } else if (r && r.ok && r.status === "duplicate") {
       setStatus("이미 저장된 영상이에요.", "ok");
-      reportSave("done", { title: r.title });
+      reportSave("already_exists", { title: r.title });
     } else {
       setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
       reportSave("error", { error: (r && r.error) || "등록 실패" });

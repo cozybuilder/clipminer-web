@@ -6,7 +6,7 @@
 // (cookies.txt / yt-dlp / 서버 다운로드 방식은 미채택.)
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Film,
   FolderOpen,
@@ -30,7 +30,10 @@ type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   | { kind: "done"; title?: string }
+  | { kind: "dup"; title?: string }
   | { kind: "error"; text: string };
+
+const SAVE_TIMEOUT_MS = 25000;
 
 export default function SavePage() {
   const [supported, setSupported] = useState(true);
@@ -40,6 +43,16 @@ export default function SavePage() {
   const [url, setUrl] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [setupOpen, setSetupOpen] = useState(false);
+
+  // 무한 대기 방지: 현재 저장 요청 id + timeout 핸들
+  const reqRef = useRef<string>("");
+  const timeoutRef = useRef<number | null>(null);
+  function clearSaveTimeout() {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
 
   const wsConnected = !!workspace && perm === "granted";
 
@@ -68,14 +81,25 @@ export default function SavePage() {
         state?: string;
         title?: string;
         error?: string;
+        requestId?: string;
       };
       if (!d) return;
       if (d.type === "clipminer:connector-ready") setBrowserReady(true);
       if (d.type === "clipminer:save-status") {
-        if (d.state === "saving") setSave({ kind: "saving" });
-        else if (d.state === "done") setSave({ kind: "done", title: d.title });
-        else if (d.state === "error")
+        // 이전(취소된) 요청의 지연 회신은 무시
+        if (d.requestId && d.requestId !== reqRef.current) return;
+        if (d.state === "saving") {
+          setSave({ kind: "saving" });
+        } else if (d.state === "done") {
+          clearSaveTimeout();
+          setSave({ kind: "done", title: d.title });
+        } else if (d.state === "already_exists") {
+          clearSaveTimeout();
+          setSave({ kind: "dup", title: d.title });
+        } else if (d.state === "error") {
+          clearSaveTimeout();
           setSave({ kind: "error", text: d.error || "저장에 실패했어요." });
+        }
       }
     };
     window.addEventListener("message", onMsg);
@@ -84,6 +108,7 @@ export default function SavePage() {
     return () => {
       window.removeEventListener("message", onMsg);
       clearTimeout(t);
+      clearSaveTimeout();
     };
   }, []);
 
@@ -128,8 +153,24 @@ export default function SavePage() {
 
     if (browserReady) {
       // 확장이 새 탭을 열고 자동 저장 → 결과는 clipminer:save-status로 수신
+      const requestId =
+        (globalThis.crypto?.randomUUID?.() ?? "") || `${Date.now()}-${Math.random()}`;
+      reqRef.current = requestId;
       setSave({ kind: "saving" });
-      window.postMessage({ type: "clipminer:save", url: full }, "*");
+      window.postMessage({ type: "clipminer:save", url: full, requestId }, "*");
+      // 무한 대기 방지: 25초 안에 done/error 없으면 안내 + 버튼 원복
+      clearSaveTimeout();
+      timeoutRef.current = window.setTimeout(() => {
+        setSave((prev) =>
+          prev.kind === "saving"
+            ? {
+                kind: "error",
+                text:
+                  "자동 저장이 완료되지 않았습니다. 열린 Douyin 페이지에서 보라색 [영상 저장] 버튼을 눌러주세요.",
+              }
+            : prev,
+        );
+      }, SAVE_TIMEOUT_MS);
     } else {
       // 확장 미설치 — 링크만 열고 설정 안내
       window.open(full, "_blank", "noopener,noreferrer");
@@ -204,6 +245,17 @@ export default function SavePage() {
               className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
             >
               라이브러리 보기 <ArrowRight size={15} />
+            </Link>
+          </div>
+        )}
+        {save.kind === "dup" && (
+          <div className="mt-3 rounded-card border border-border bg-card p-4 text-sm text-subtext">
+            이미 저장된 영상이에요. {save.title ? `‘${save.title}’ ` : ""}라이브러리에 있습니다.
+            <Link
+              href="/videos"
+              className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              라이브러리 보기 <ArrowRight size={13} />
             </Link>
           </div>
         )}

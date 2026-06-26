@@ -19,36 +19,69 @@ const WEB_OPEN_URL = "http://localhost:3000/videos";
 let pendingDouyinTab = null; // 단일 흐름: 마지막 Douyin 탭으로 등록 결과 회신
 const autoSaveTabs = new Set(); // 자동 저장하도록 연 Douyin 탭
 let saveStatusTab = null; // "콘텐츠 저장" 페이지 탭(진행 상태 회신 대상)
+const tabSave = new Map(); // douyinTabId -> { requestId, alive, watchdog }
+
+// 저장 진행 상태를 "콘텐츠 저장" 페이지로 중계 (requestId 부착)
+function relayStatus(requestId, state, extra) {
+  if (saveStatusTab == null) return;
+  chrome.tabs
+    .sendMessage(saveStatusTab, {
+      type: "saveStatusToPage",
+      requestId,
+      state,
+      title: extra && extra.title,
+      error: extra && extra.error,
+    })
+    .catch(() => {});
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // "콘텐츠 저장" 페이지 → Douyin 새 탭을 열고 자동 저장하도록 표시
   if (msg && msg.type === "saveDouyin") {
     saveStatusTab = _sender && _sender.tab ? _sender.tab.id : null;
+    const requestId = msg.requestId || null;
     chrome.tabs.create({ url: msg.url, active: true }, (tab) => {
-      if (tab && tab.id != null) autoSaveTabs.add(tab.id);
+      if (tab && tab.id != null) {
+        autoSaveTabs.add(tab.id);
+        // watchdog: content script가 시간 내 로드/응답 안 하면 즉시 error 회신
+        const watchdog = setTimeout(() => {
+          const info = tabSave.get(tab.id);
+          if (info && !info.alive) {
+            relayStatus(requestId, "error", {
+              error: "페이지를 준비하지 못했어요. 잠시 후 다시 시도해주세요.",
+            });
+            tabSave.delete(tab.id);
+          }
+        }, 9000);
+        tabSave.set(tab.id, { requestId, alive: false, watchdog });
+      }
       sendResponse({ ok: !!tab });
     });
     return true;
   }
-  // Douyin content → 이 탭이 자동 저장 대상인지 (1회성)
+  // Douyin content → 이 탭이 자동 저장 대상인지 (1회성). 응답 = content 살아있음 표시
   if (msg && msg.type === "isAutoSave") {
     const id = _sender && _sender.tab ? _sender.tab.id : null;
     const auto = id != null && autoSaveTabs.has(id);
     if (auto) autoSaveTabs.delete(id);
+    const info = id != null ? tabSave.get(id) : null;
+    if (info) {
+      info.alive = true;
+      clearTimeout(info.watchdog); // content 로드됨 → watchdog 해제(이후 상태가 결과를 결정)
+    }
     sendResponse({ auto });
     return false;
   }
-  // Douyin content → 저장 진행 상태를 "콘텐츠 저장" 페이지로 중계
+  // Douyin content → 저장 진행 상태를 페이지로 중계 (탭의 requestId 부착)
   if (msg && msg.type === "saveStatus") {
-    if (saveStatusTab != null)
-      chrome.tabs
-        .sendMessage(saveStatusTab, {
-          type: "saveStatusToPage",
-          state: msg.state,
-          title: msg.title,
-          error: msg.error,
-        })
-        .catch(() => {});
+    const id = _sender && _sender.tab ? _sender.tab.id : null;
+    const info = id != null ? tabSave.get(id) : null;
+    const requestId = info ? info.requestId : null;
+    relayStatus(requestId, msg.state, { title: msg.title, error: msg.error });
+    if (info && (msg.state === "done" || msg.state === "error" || msg.state === "already_exists")) {
+      clearTimeout(info.watchdog);
+      tabSave.delete(id);
+    }
     return false;
   }
 

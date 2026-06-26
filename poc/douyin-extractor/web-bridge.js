@@ -15,7 +15,7 @@ window.addEventListener("message", (e) => {
   }
   // 페이지("콘텐츠 저장") → background: 링크 저장 요청
   if (d.type === "clipminer:save" && d.url) {
-    chrome.runtime.sendMessage({ type: "saveDouyin", url: d.url });
+    chrome.runtime.sendMessage({ type: "saveDouyin", url: d.url, requestId: d.requestId });
   }
 });
 announce();
@@ -29,7 +29,13 @@ chrome.runtime.onMessage.addListener((msg) => {
   // 저장 진행 상태 → 페이지(사용자 언어)
   if (msg.type === "saveStatusToPage") {
     window.postMessage(
-      { type: "clipminer:save-status", state: msg.state, title: msg.title, error: msg.error },
+      {
+        type: "clipminer:save-status",
+        state: msg.state,
+        title: msg.title,
+        error: msg.error,
+        requestId: msg.requestId,
+      },
       "*",
     );
   }
