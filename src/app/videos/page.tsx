@@ -84,6 +84,19 @@ const STATUS_BADGE: Record<VideoStatus, string> = {
   done: "bg-primary/20 text-primary border-primary/40",
 };
 
+// Desktop 기본 추천 태그 (1차)
+const RECOMMENDED_TAGS = [
+  "수납",
+  "주방",
+  "욕실",
+  "생활용품",
+  "청소",
+  "아이디어",
+  "육아",
+  "캠핑",
+  "자동차",
+];
+
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 
 function parseTags(raw: string): string[] {
@@ -99,11 +112,6 @@ function formatDate(ms: number): string {
     month: "2-digit",
     day: "2-digit",
   });
-}
-
-// 표시 제목 우선순위 (Desktop 동일): translatedTitle → originalTitle → title
-function displayTitle(v: VideoItem): string {
-  return v.translatedTitle || v.originalTitle || v.title || "(제목 없음)";
 }
 
 function formatFileSize(bytes?: number): string {
@@ -334,6 +342,17 @@ export default function VideoLibraryPage() {
 
   async function handleMemoSave(id: string, note: string) {
     await updateVideo(id, { note });
+    await refresh();
+  }
+
+  // 제목 수정(관리용 = translatedTitle/title). 사용자가 수정하면 그대로 유지(자동 재번역 없음)
+  async function handleTitleSave(id: string, title: string) {
+    await updateVideo(id, { title, translatedTitle: title });
+    await refresh();
+  }
+
+  async function handleTagsChange(id: string, tags: string[]) {
+    await updateVideo(id, { tags });
     await refresh();
   }
 
@@ -714,6 +733,8 @@ export default function VideoLibraryPage() {
           onClose={() => setDetailId(null)}
           onStatusChange={handleStatusChange}
           onMemoSave={handleMemoSave}
+          onTitleSave={handleTitleSave}
+          onTagsChange={handleTagsChange}
           onToggleFavorite={handleToggleFavorite}
           onAttachFile={handleAttachFile}
           onDelete={handleDelete}
@@ -877,6 +898,46 @@ function VideoCard({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const needsRelink = !fileUrl && !!video.localFileName;
 
+  // Hover 자동 재생 (Desktop 동일): 진입 500ms 후 재생, 이탈 시 정지+첫 프레임, 단일 재생, 모바일 비활성
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hoverTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
+  function startHover() {
+    if (!fileUrl) return;
+    if (typeof window !== "undefined" && window.matchMedia && !window.matchMedia("(hover: hover)").matches)
+      return; // 모바일/터치 비활성
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      // 현재 카드만 재생 — 나머지 영상 정지
+      document
+        .querySelectorAll<HTMLVideoElement>("video[data-cm-video]")
+        .forEach((v) => {
+          if (v !== videoRef.current) {
+            v.pause();
+            v.currentTime = 0;
+          }
+        });
+      videoRef.current?.play().catch(() => {});
+    }, 500);
+  }
+  function endHover() {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.currentTime = 0;
+    }
+  }
+
+  const bigTitle = video.translatedTitle || video.title || video.originalTitle || "(제목 없음)";
+  const smallTitle =
+    video.originalTitle && video.originalTitle !== bigTitle ? video.originalTitle : "";
+
   return (
     <div
       onClick={() => onOpen(video.id)}
@@ -887,21 +948,20 @@ function VideoCard({
       }`}
     >
       {/* 썸네일 / 로컬 영상 */}
-      <div className="relative aspect-[9/16] overflow-hidden bg-border">
+      <div
+        className="relative aspect-[9/16] overflow-hidden bg-border"
+        onMouseEnter={startHover}
+        onMouseLeave={endHover}
+      >
         {fileUrl ? (
           <video
+            ref={videoRef}
+            data-cm-video
             src={fileUrl}
             muted
             loop
             playsInline
             preload="metadata"
-            onMouseEnter={(e) => {
-              void e.currentTarget.play().catch(() => {});
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.pause();
-              e.currentTarget.currentTime = 0;
-            }}
             className="h-full w-full object-cover"
           />
         ) : thumb ? (
@@ -976,9 +1036,16 @@ function VideoCard({
 
       {/* 정보 */}
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <p className="line-clamp-2 text-sm font-medium leading-snug text-text">
-          {displayTitle(video)}
-        </p>
+        <div>
+          <p className="line-clamp-2 text-sm font-medium leading-snug text-text">
+            {bigTitle}
+          </p>
+          {smallTitle && (
+            <p className="line-clamp-1 text-xs leading-snug text-subtext/80">
+              {smallTitle}
+            </p>
+          )}
+        </div>
 
         {video.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -1048,6 +1115,8 @@ function DetailModal({
   onClose,
   onStatusChange,
   onMemoSave,
+  onTitleSave,
+  onTagsChange,
   onToggleFavorite,
   onAttachFile,
   onDelete,
@@ -1057,6 +1126,8 @@ function DetailModal({
   onClose: () => void;
   onStatusChange: (id: string, s: VideoStatus) => void;
   onMemoSave: (id: string, note: string) => void;
+  onTitleSave: (id: string, title: string) => void;
+  onTagsChange: (id: string, tags: string[]) => void;
   onToggleFavorite: (id: string, value: boolean) => void;
   onAttachFile: (id: string, file: File) => void;
   onDelete: (id: string) => void;
@@ -1064,8 +1135,32 @@ function DetailModal({
   const thumb = getThumbnail(video.url);
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState(video.note);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const bigTitle = video.translatedTitle || video.title || video.originalTitle || "(제목 없음)";
+
+  function startTitleEdit() {
+    setTitleDraft(bigTitle === "(제목 없음)" ? "" : bigTitle);
+    setTitleEditing(true);
+  }
+  function saveTitle() {
+    const t = titleDraft.trim();
+    if (t) onTitleSave(video.id, t);
+    setTitleEditing(false);
+  }
+  function addTag(tag: string) {
+    if (video.tags.includes(tag)) return; // 중복 금지
+    onTagsChange(video.id, [...video.tags, tag]);
+  }
+  function removeTag(tag: string) {
+    onTagsChange(
+      video.id,
+      video.tags.filter((t) => t !== tag),
+    );
+  }
 
   // 상세 모달이 열리면(로컬 파일 연결 시) 즉시 무음 자동 재생
   useEffect(() => {
@@ -1165,9 +1260,55 @@ function DetailModal({
 
           {/* 정보 */}
           <div className="flex flex-col gap-4">
-            <h1 className="text-xl font-semibold leading-snug text-text">
-              {displayTitle(video)}
-            </h1>
+            {/* 제목 (번역 크게 / 원문 작게, 수정 가능) */}
+            <div>
+              {titleEditing ? (
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveTitle();
+                      if (e.key === "Escape") setTitleEditing(false);
+                    }}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-lg font-semibold text-text focus:border-primary/60 focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveTitle}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-white transition-colors hover:bg-primary/90"
+                    >
+                      <Check size={12} /> 저장
+                    </button>
+                    <button
+                      onClick={() => setTitleEditing(false)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:text-text"
+                    >
+                      <X size={12} /> 취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group/title flex items-start justify-between gap-2">
+                  <div>
+                    <h1 className="text-xl font-semibold leading-snug text-text">
+                      {bigTitle}
+                    </h1>
+                    {video.originalTitle && video.originalTitle !== bigTitle && (
+                      <p className="mt-0.5 text-sm text-subtext">{video.originalTitle}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={startTitleEdit}
+                    className="shrink-0 rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
+                    title="제목 수정"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <InfoRow icon={<Calendar size={15} />} label="등록일">
               <span className="text-sm text-text">
@@ -1260,14 +1401,39 @@ function DetailModal({
                   {video.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs text-primary"
+                      className="flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs text-primary"
                     >
                       #{t}
+                      <button
+                        onClick={() => removeTag(t)}
+                        className="opacity-60 hover:opacity-100"
+                        title="태그 제거"
+                      >
+                        <X size={11} />
+                      </button>
                     </span>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-subtext/50">태그 없음</p>
+              )}
+
+              {/* 추천 태그 (클릭 시 추가, 중복 제외) */}
+              {RECOMMENDED_TAGS.some((t) => !video.tags.includes(t)) && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <p className="mb-1.5 text-xs text-subtext/70">추천 태그</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RECOMMENDED_TAGS.filter((t) => !video.tags.includes(t)).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => addTag(t)}
+                        className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-primary"
+                      >
+                        + {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
