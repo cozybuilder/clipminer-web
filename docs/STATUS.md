@@ -1,15 +1,15 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 4-C Desktop StatCard 필터 정합)
+> 최종 갱신: 2026-06-27 (Phase 4-D Desktop 카드/상세 흐름 보강)
 
 ---
 
 ## 현재 단계
 
-**Phase 4-C — ClipMiner Desktop(v0.1.1) Dashboard 구조 정합 완료.**
-필터를 좌측 사이드바 → **상단 StatCard**(전체/미제작/제작중/제작완료) 구조로 변경(Desktop 원본 동일).
-상단 헤더(로고/검색/정렬/영상 추가) + StatCard 필터 + 보조 태그 필터 라인 + 9:16 쇼츠 카드 그리드 + 추가 모달.
-데이터 계층(IndexedDB/Dexie)·스키마는 무변경.
+**Phase 4-D — Desktop 카드/상세 흐름 보강 완료.**
+카드에 플랫폼 배지 + URL 복사 추가, 카드 클릭 시 **상세 모달**(9:16 / URL 열기·복사 / 태그 / 상태 변경 /
+메모 수정 / 삭제) 제공. 추가 모달에 플랫폼 자동 추정(YouTube/Douyin/Xiaohongshu/TikTok/기타) 표시.
+**스키마 v2**: `platform` 필드 추가 + Dexie migration(기존 레코드 URL로 백필).
 
 실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
@@ -103,6 +103,15 @@
 - [x] 헤더: 로고 + 검색 + 정렬 + "영상 추가" (Desktop Dashboard 헤더 배치)
 - [x] 9:16 카드 그리드 / 카드 UI / 추가 모달 유지
 - [x] 수동 검증: StatCard 필터/태그 필터/검색/추가/상태변경/삭제/새로고침 유지
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
+### Phase 4-D — Desktop 카드/상세 흐름 보강 (2026-06-27)
+- [x] 스키마 v2: `VideoItem.platform` 추가, Dexie `db.version(2)` migration(기존 레코드 URL→platform 백필)
+- [x] 플랫폼 추정 유틸 (`src/lib/platform.ts`): YouTube/Douyin/Xiaohongshu/TikTok/기타 + 배지
+- [x] 카드 보강: 플랫폼 배지(좌하단) + 상태 배지 + 태그 + 메모 미리보기 + 상태 선택 + URL 복사 + 날짜
+- [x] 카드 클릭 → 상세 모달: 9:16 썸네일 / URL(열기·복사) / 태그 / 제작 상태 변경 / 메모 수정(인라인) / 삭제
+- [x] 추가 모달: URL 입력 시 플랫폼 자동 추정 배지 표시
+- [x] 수동 검증: 추가/플랫폼 추정·저장(DB v2)/카드·상세 표시/메모 수정/상태 변경/URL 복사/삭제/새로고침 유지
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
 ## 미완료 (이후 단계)

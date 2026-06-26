@@ -5,6 +5,7 @@
 
 import Dexie, { type EntityTable } from "dexie";
 import type { TagItem, VideoItem } from "./types";
+import { detectPlatform } from "./platform";
 
 const DB_NAME = "clipminer";
 
@@ -26,3 +27,20 @@ db.version(1).stores({
   videos: "id, status, updatedAt, createdAt, *tags",
   tags: "name, createdAt",
 });
+
+// 스키마 v2
+// - videos에 platform 인덱스 추가
+// - 기존 레코드는 URL로부터 platform을 추정하여 백필
+db.version(2)
+  .stores({
+    videos: "id, status, platform, updatedAt, createdAt, *tags",
+    tags: "name, createdAt",
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table<VideoItem>("videos")
+      .toCollection()
+      .modify((v) => {
+        if (!v.platform) v.platform = detectPlatform(v.url ?? "");
+      });
+  });

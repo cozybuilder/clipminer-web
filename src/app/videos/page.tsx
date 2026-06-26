@@ -1,10 +1,9 @@
 "use client";
 
 // ClipMiner Web — Video Library.
-// ClipMiner Desktop(v0.1.1) 원본 사용감을 재현: 상단 헤더(로고/검색/정렬/추가) +
-// 상단 StatCard 필터(전체/미제작/제작중/제작완료) + 보조 태그 필터 라인 +
-// 9:16 쇼츠 카드 그리드 + 추가 모달.
-// 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장은 범위 밖.
+// ClipMiner Desktop(v0.1.1) 사용감 재현: 헤더(로고/검색/정렬/추가) + 상단 StatCard 필터 +
+// 보조 태그 필터 라인 + 9:16 쇼츠 카드 그리드 + 추가 모달 + 상세 모달(메모 수정/상태/복사/삭제).
+// 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장/다운로드는 범위 밖.
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +17,13 @@ import {
   Circle,
   Clapperboard,
   CheckCircle2,
+  Copy,
+  Check,
+  Pencil,
+  Calendar,
+  Tag as TagIcon,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -32,6 +38,12 @@ import {
   updateVideo,
 } from "@/lib/videos";
 import { getThumbnail } from "@/lib/thumbnail";
+import {
+  detectPlatform,
+  PLATFORM_BADGE,
+  PLATFORM_LABELS,
+  type Platform,
+} from "@/lib/platform";
 
 type StatusFilter = "all" | VideoStatus;
 type SortKey = "updated" | "created" | "title";
@@ -59,6 +71,60 @@ function formatDate(ms: number): string {
   });
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+}
+
+function PlatformBadge({ platform }: { platform: Platform }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${PLATFORM_BADGE[platform]}`}
+    >
+      {PLATFORM_LABELS[platform]}
+    </span>
+  );
+}
+
+function CopyButton({
+  text,
+  label,
+  className,
+}: {
+  text: string;
+  label?: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        copyText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+      className={
+        className ??
+        "flex items-center gap-1.5 text-xs text-subtext transition-colors hover:text-primary"
+      }
+      title="URL 복사"
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+      {label && <span>{copied ? "복사됨" : label}</span>}
+    </button>
+  );
+}
+
 export default function VideoLibraryPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +134,7 @@ export default function VideoLibraryPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("updated");
   const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   async function refresh() {
     setVideos(await listVideos());
@@ -90,6 +157,7 @@ export default function VideoLibraryPage() {
   async function handleDelete(id: string) {
     if (!window.confirm("이 영상을 삭제하시겠습니까?")) return;
     await deleteVideo(id);
+    if (detailId === id) setDetailId(null);
     await refresh();
   }
 
@@ -98,7 +166,11 @@ export default function VideoLibraryPage() {
     await refresh();
   }
 
-  // 상태 카운트
+  async function handleMemoSave(id: string, note: string) {
+    await updateVideo(id, { note });
+    await refresh();
+  }
+
   const counts = useMemo(() => {
     const c: Record<StatusFilter, number> = {
       all: videos.length,
@@ -110,7 +182,6 @@ export default function VideoLibraryPage() {
     return c;
   }, [videos]);
 
-  // 태그 목록 (빈도순)
   const tagList = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of videos)
@@ -118,7 +189,6 @@ export default function VideoLibraryPage() {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [videos]);
 
-  // 필터 + 검색 + 정렬
   const results = useMemo(() => {
     const q = norm(query);
     const filtered = videos.filter((v) => {
@@ -158,10 +228,13 @@ export default function VideoLibraryPage() {
   ];
 
   const activeLabel = stats.find((s) => s.key === statusFilter)?.label;
+  const detailVideo = detailId
+    ? videos.find((v) => v.id === detailId) ?? null
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-text">
-      {/* ───────── 상단 헤더 (로고 / 검색 / 정렬 / 추가) ───────── */}
+      {/* ───────── 헤더 ───────── */}
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-6 py-4">
           <Link href="/" className="mr-2 flex shrink-0 items-center gap-2.5" title="홈으로">
@@ -291,6 +364,7 @@ export default function VideoLibraryPage() {
               <VideoCard
                 key={v.id}
                 video={v}
+                onOpen={setDetailId}
                 onDelete={handleDelete}
                 onStatusChange={handleStatusChange}
                 onTagClick={setTagFilter}
@@ -307,6 +381,16 @@ export default function VideoLibraryPage() {
             setAdding(false);
             await refresh();
           }}
+        />
+      )}
+
+      {detailVideo && (
+        <DetailModal
+          video={detailVideo}
+          onClose={() => setDetailId(null)}
+          onStatusChange={handleStatusChange}
+          onMemoSave={handleMemoSave}
+          onDelete={handleDelete}
         />
       )}
     </div>
@@ -349,38 +433,38 @@ function StatCard({
   );
 }
 
-// ───────── 영상 카드 (9:16 쇼츠형) ─────────
+// ───────── 영상 카드 (9:16 쇼츠형, 클릭 시 상세) ─────────
 function VideoCard({
   video,
+  onOpen,
   onDelete,
   onStatusChange,
   onTagClick,
 }: {
   video: VideoItem;
+  onOpen: (id: string) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, s: VideoStatus) => void;
   onTagClick: (t: string) => void;
 }) {
   const thumb = getThumbnail(video.url);
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+    <div
+      onClick={() => onOpen(video.id)}
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-card border border-border bg-card transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5"
+    >
       {/* 썸네일 (카드 중심) */}
       <div className="relative aspect-[9/16] overflow-hidden bg-border">
-        {video.url ? (
-          <a href={video.url} target="_blank" rel="noopener noreferrer">
-            {thumb ? (
-              // 외부 썸네일 — next/image 대신 일반 img (도메인 비고정)
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={thumb}
-                alt={video.title}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <ThumbPlaceholder />
-            )}
-          </a>
+        {thumb ? (
+          // 외부 썸네일 — next/image 대신 일반 img (도메인 비고정)
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumb}
+            alt={video.title}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
         ) : (
           <ThumbPlaceholder />
         )}
@@ -392,9 +476,17 @@ function VideoCard({
           {VIDEO_STATUS_LABELS[video.status]}
         </span>
 
+        {/* 플랫폼 배지 (좌하단, Desktop과 동일 위치) */}
+        <div className="absolute bottom-2 left-2">
+          <PlatformBadge platform={video.platform} />
+        </div>
+
         {/* 삭제 (우상단, hover 시) */}
         <button
-          onClick={() => onDelete(video.id)}
+          onClick={(e) => {
+            stop(e);
+            onDelete(video.id);
+          }}
           className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white/80 opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white group-hover:opacity-100"
           title="삭제"
         >
@@ -413,7 +505,10 @@ function VideoCard({
             {video.tags.map((t) => (
               <button
                 key={t}
-                onClick={() => onTagClick(t)}
+                onClick={(e) => {
+                  stop(e);
+                  onTagClick(t);
+                }}
                 className="rounded bg-background px-1.5 py-0.5 text-xs text-subtext transition-colors hover:text-primary"
               >
                 #{t}
@@ -428,13 +523,15 @@ function VideoCard({
           </p>
         )}
 
-        {/* 상태 빠른 변경 + 날짜 */}
+        {/* 상태 빠른 변경 + URL 복사 + 날짜 */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">
           <select
             value={video.status}
-            onChange={(e) =>
-              onStatusChange(video.id, e.target.value as VideoStatus)
-            }
+            onClick={stop}
+            onChange={(e) => {
+              stop(e);
+              onStatusChange(video.id, e.target.value as VideoStatus);
+            }}
             className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-text focus:border-primary/60 focus:outline-none"
             title="상태 변경"
           >
@@ -444,9 +541,12 @@ function VideoCard({
               </option>
             ))}
           </select>
-          <span className="text-xs text-subtext/60">
-            {formatDate(video.createdAt)}
-          </span>
+          <div className="flex items-center gap-2">
+            <CopyButton text={video.url} />
+            <span className="text-xs text-subtext/60">
+              {formatDate(video.createdAt)}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -458,6 +558,243 @@ function ThumbPlaceholder() {
     <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-subtext/40">
       <Film size={28} />
       <span className="text-xs">No Preview</span>
+    </div>
+  );
+}
+
+// ───────── 상세 모달 (Desktop VideoDetail 흐름 이식) ─────────
+function DetailModal({
+  video,
+  onClose,
+  onStatusChange,
+  onMemoSave,
+  onDelete,
+}: {
+  video: VideoItem;
+  onClose: () => void;
+  onStatusChange: (id: string, s: VideoStatus) => void;
+  onMemoSave: (id: string, note: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const thumb = getThumbnail(video.url);
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState(video.note);
+
+  function startEdit() {
+    setMemoDraft(video.note);
+    setMemoEditing(true);
+  }
+  async function saveMemo() {
+    await onMemoSave(video.id, memoDraft.trim());
+    setMemoEditing(false);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-card border border-border bg-card shadow-2xl shadow-black/40">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
+          <div className="flex items-center gap-2">
+            <PlatformBadge platform={video.platform} />
+            <span
+              className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[video.status]}`}
+            >
+              {VIDEO_STATUS_LABELS[video.status]}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-subtext transition-colors hover:bg-border/60 hover:text-text"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 md:grid-cols-[260px_1fr]">
+          {/* 썸네일 */}
+          <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-card border border-border bg-border">
+            {thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumb}
+                alt={video.title}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <ThumbPlaceholder />
+            )}
+          </div>
+
+          {/* 정보 */}
+          <div className="flex flex-col gap-4">
+            <h1 className="text-xl font-semibold leading-snug text-text">
+              {video.title || "(제목 없음)"}
+            </h1>
+
+            {/* 등록일 */}
+            <InfoRow icon={<Calendar size={15} />} label="등록일">
+              <span className="text-sm text-text">
+                {formatDate(video.createdAt)}
+                {video.updatedAt !== video.createdAt && (
+                  <span className="text-subtext"> · 수정 {formatDate(video.updatedAt)}</span>
+                )}
+              </span>
+            </InfoRow>
+
+            {/* URL */}
+            <div className="rounded-card border border-border bg-background p-4">
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-xs text-subtext">영상 URL</p>
+                {video.url && (
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={video.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-subtext transition-colors hover:text-primary"
+                    >
+                      <ExternalLink size={12} /> 열기
+                    </a>
+                    <CopyButton text={video.url} label="복사" />
+                  </div>
+                )}
+              </div>
+              <p className="break-all font-mono text-sm leading-relaxed text-text">
+                {video.url || "URL 없음"}
+              </p>
+            </div>
+
+            {/* 태그 */}
+            <div className="rounded-card border border-border bg-background p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <TagIcon size={14} className="text-subtext" />
+                <p className="text-xs text-subtext">태그</p>
+              </div>
+              {video.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {video.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs text-primary"
+                    >
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-subtext/50">태그 없음</p>
+              )}
+            </div>
+
+            {/* 제작 상태 */}
+            <div className="rounded-card border border-border bg-background p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Clapperboard size={14} className="text-subtext" />
+                <p className="text-xs text-subtext">제작 상태</p>
+              </div>
+              <div className="flex gap-2">
+                {VIDEO_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => onStatusChange(video.id, s)}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                      video.status === s
+                        ? "border-primary bg-primary text-white"
+                        : "border-border bg-card text-subtext hover:text-text"
+                    }`}
+                  >
+                    {VIDEO_STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 메모 */}
+            <div className="rounded-card border border-border bg-background p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-subtext" />
+                  <p className="text-xs text-subtext">메모</p>
+                </div>
+                {!memoEditing && (
+                  <button
+                    onClick={startEdit}
+                    className="flex items-center gap-1.5 text-xs text-subtext transition-colors hover:text-primary"
+                  >
+                    <Pencil size={12} /> 수정
+                  </button>
+                )}
+              </div>
+              {memoEditing ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={memoDraft}
+                    onChange={(e) => setMemoDraft(e.target.value)}
+                    rows={4}
+                    autoFocus
+                    placeholder="이 영상에 대한 메모를 입력하세요..."
+                    className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-sm leading-relaxed text-text placeholder:text-subtext/50 focus:border-primary/60 focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveMemo}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-white transition-colors hover:bg-primary/90"
+                    >
+                      <Check size={12} /> 저장
+                    </button>
+                    <button
+                      onClick={() => setMemoEditing(false)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:text-text"
+                    >
+                      <X size={12} /> 취소
+                    </button>
+                  </div>
+                </div>
+              ) : video.note ? (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-text">
+                  {video.note}
+                </p>
+              ) : (
+                <p className="text-sm text-subtext/50">메모 없음</p>
+              )}
+            </div>
+
+            {/* 삭제 */}
+            <button
+              onClick={() => onDelete(video.id)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-subtext transition-colors hover:border-red-500/40 hover:text-red-400"
+            >
+              <Trash2 size={15} /> 삭제
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-card border border-border bg-background p-4">
+      <span className="text-subtext">{icon}</span>
+      <div>
+        <p className="mb-0.5 text-xs text-subtext">{label}</p>
+        {children}
+      </div>
     </div>
   );
 }
@@ -477,6 +814,8 @@ function AddVideoModal({
   const [status, setStatus] = useState<VideoStatus>("idea");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const platform = detectPlatform(url.trim());
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -522,6 +861,10 @@ function AddVideoModal({
                 placeholder="https://youtu.be/..."
                 className={inputCls}
               />
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="text-xs text-subtext/60">추정 플랫폼:</span>
+                <PlatformBadge platform={platform} />
+              </div>
             </Field>
             <Field label="제목">
               <input

@@ -1,5 +1,7 @@
 // ClipMiner Web — Local data layer types (Local-First / IndexedDB)
 
+import type { Platform } from "./platform";
+
 /** 영상 제작 상태 */
 export type VideoStatus = "idea" | "in_progress" | "done";
 
@@ -22,6 +24,8 @@ export interface VideoItem {
   id: string;
   /** 영상 원본 URL / 출처 */
   url: string;
+  /** URL로부터 추정된 플랫폼 (schema v2) */
+  platform: Platform;
   /** 사용자가 직접 입력한 제목 */
   title: string;
   /** 사용자가 직접 부착한 태그 (배열 필드) */

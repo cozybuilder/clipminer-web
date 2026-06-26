@@ -2,6 +2,7 @@
 
 import { db } from "./db";
 import { ensureTags } from "./tags";
+import { detectPlatform } from "./platform";
 import type { NewVideoInput, VideoItem, VideoPatch } from "./types";
 
 /** uuid 생성 (브라우저 crypto 사용) */
@@ -17,9 +18,11 @@ function newId(): string {
 export async function addVideo(input: NewVideoInput): Promise<VideoItem> {
   const tags = await ensureTags(input.tags);
   const now = Date.now();
+  const url = input.url.trim();
   const item: VideoItem = {
     id: newId(),
-    url: input.url.trim(),
+    url,
+    platform: detectPlatform(url),
     title: input.title.trim(),
     tags,
     note: input.note,
