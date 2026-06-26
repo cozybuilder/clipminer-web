@@ -1,16 +1,17 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 3 Local 데이터 계층 MVP)
+> 최종 갱신: 2026-06-27 (Phase 4 Video Library UI MVP)
 
 ---
 
 ## 현재 단계
 
-**Phase 3 — Local-First 데이터 계층(IndexedDB/Dexie) 1차 완료.**
-영상 메타데이터의 추가/조회/수정/삭제가 IndexedDB에 실제 저장·영속됨을 검증함.
-실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
+**Phase 4 — Video Library UI(MVP) 완료.**
+`/videos`를 정식 라이브러리 화면으로 개선: 등록 폼 + 카드 목록 + 상태 필터 + 검색 +
+카드 내 상태 변경 + 빈 상태 UI. 루트(`/`)에 라이브러리 진입 버튼 추가.
+데이터는 IndexedDB에 영속(추가/조회/수정/삭제/새로고침 유지 검증 완료).
 
-웹 앱 골격 + 로컬 데이터 계층(개발 확인용 `/videos` UI)까지 구성됨.
+실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
 > **저장 전략 변경 (2026-06-27):** MVP는 **Local-First**로 확정.
 > 메타데이터·태그·메모·제작 상태 → 브라우저 **IndexedDB(Dexie)**,
@@ -72,13 +73,25 @@
 - [x] 검증: `npm run lint` / `npm run build` 통과
 - 범위 제외(다음 단계): 실제 영상 파일 저장, File System Access API, JSON Import/Export
 
+### Phase 4 — Video Library UI / MVP (2026-06-27)
+- [x] `/videos` 정식 라이브러리 화면 (헤더 + 등록 폼 + 카드 목록)
+- [x] 카드: 제목/URL/태그/메모/상태 배지/생성·수정일/삭제
+- [x] 상태 필터 (전체·아이디어·진행중·완료, 카운트 표시)
+- [x] 텍스트 검색 (제목·URL·태그·메모) + 태그 칩 클릭 검색
+- [x] 카드 내 상태 즉시 변경 (셀렉트 → IndexedDB 반영)
+- [x] 빈 상태 UI (데이터 없음 / 검색 결과 없음 구분)
+- [x] 루트(`/`)에 "내 라이브러리 열기" 진입 버튼
+- [x] 수동 검증: 추가/조회/상태변경/필터/검색/삭제/새로고침 유지 확인
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
 ## 미완료 (이후 단계)
 
-### Phase 4 — 영상 파일 / UX
+### Phase 5 — 영상 파일 / 데이터 이동
 - [ ] 로컬 폴더 지정 + 실제 영상 파일 저장/참조 (File System Access API 등)
-- [ ] 정식 영상 관리 UI (현재 `/videos`는 개발 확인용)
+- [ ] 영상 편집(수정) UI (현재는 상태 변경 + 삭제만)
 
 ### 이후 (선택적)
+- [ ] JSON Import/Export (백업 파일)
 - [ ] Backup/Sync — 선택적 클라우드 동기화 (이때 외부 DB/인증 재검토)
 
 ---
