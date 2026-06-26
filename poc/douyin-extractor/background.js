@@ -16,9 +16,42 @@ function abToBase64(ab) {
 // ClipMiner Web 라이브러리 탭 매칭/열기 (등록 수신부는 /videos 페이지)
 const WEB_MATCHES = ["http://localhost:3000/videos*", "https://clipminer.cozybuilder.co.kr/videos*"];
 const WEB_OPEN_URL = "http://localhost:3000/videos";
-let pendingDouyinTab = null; // 단일 흐름 PoC: 마지막 Douyin 탭으로 결과 회신
+let pendingDouyinTab = null; // 단일 흐름: 마지막 Douyin 탭으로 등록 결과 회신
+const autoSaveTabs = new Set(); // 자동 저장하도록 연 Douyin 탭
+let saveStatusTab = null; // "콘텐츠 저장" 페이지 탭(진행 상태 회신 대상)
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // "콘텐츠 저장" 페이지 → Douyin 새 탭을 열고 자동 저장하도록 표시
+  if (msg && msg.type === "saveDouyin") {
+    saveStatusTab = _sender && _sender.tab ? _sender.tab.id : null;
+    chrome.tabs.create({ url: msg.url, active: true }, (tab) => {
+      if (tab && tab.id != null) autoSaveTabs.add(tab.id);
+      sendResponse({ ok: !!tab });
+    });
+    return true;
+  }
+  // Douyin content → 이 탭이 자동 저장 대상인지 (1회성)
+  if (msg && msg.type === "isAutoSave") {
+    const id = _sender && _sender.tab ? _sender.tab.id : null;
+    const auto = id != null && autoSaveTabs.has(id);
+    if (auto) autoSaveTabs.delete(id);
+    sendResponse({ auto });
+    return false;
+  }
+  // Douyin content → 저장 진행 상태를 "콘텐츠 저장" 페이지로 중계
+  if (msg && msg.type === "saveStatus") {
+    if (saveStatusTab != null)
+      chrome.tabs
+        .sendMessage(saveStatusTab, {
+          type: "saveStatusToPage",
+          state: msg.state,
+          title: msg.title,
+          error: msg.error,
+        })
+        .catch(() => {});
+    return false;
+  }
+
   // Douyin content → Web 탭으로 등록 payload 전달
   if (msg && msg.type === "registerToWeb") {
     (async () => {

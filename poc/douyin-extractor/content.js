@@ -4,36 +4,58 @@
 
 (function () {
   "use strict";
-  const TAG = "[ClipMiner PoC]";
+  const TAG = "[ClipMiner]";
 
+  // 사용자용 패널: "영상 저장" 버튼 + 상태 한 줄. (개발 로그는 콘솔로만)
   function panel() {
     let el = document.getElementById("clipminer-poc-panel");
     if (el) return el;
     el = document.createElement("div");
     el.id = "clipminer-poc-panel";
     el.style.cssText =
-      "position:fixed;z-index:2147483647;right:16px;bottom:16px;width:400px;max-height:70vh;overflow:auto;" +
+      "position:fixed;z-index:2147483647;right:16px;bottom:16px;width:280px;" +
       "background:#1A1D26;color:#F5F7FA;border:1px solid #2B2F3A;border-radius:12px;padding:12px 14px;" +
-      "font:12px/1.5 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5)";
+      "font:13px/1.5 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5)";
     el.innerHTML =
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-      '<b style="color:#7C5CFC">ClipMiner PoC — Douyin</b>' +
-      '<button id="cmpoc-run" style="background:#7C5CFC;color:#fff;border:0;border-radius:8px;padding:4px 10px;cursor:pointer">추출 시도</button>' +
-      "</div><div id='cmpoc-log'></div>";
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<b style="color:#7C5CFC">ClipMiner</b>' +
+      '<button id="cmpoc-run" style="background:#7C5CFC;color:#fff;border:0;border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600">영상 저장</button>' +
+      "</div>" +
+      '<div id="cmpoc-status" style="margin-top:8px;color:#9AA4B2"></div>' +
+      '<div id="cmpoc-log"></div>';
     document.documentElement.appendChild(el);
     el.querySelector("#cmpoc-run").addEventListener("click", run);
     return el;
   }
+
+  // 사용자 상태 표시 (사용자 언어). kind: info | ok | error
+  function setStatus(text, kind) {
+    const c = kind === "ok" ? "#34d399" : kind === "error" ? "#f87171" : "#9AA4B2";
+    const s = panel().querySelector("#cmpoc-status");
+    if (s) {
+      s.style.color = c;
+      s.textContent = text;
+    }
+  }
+
+  // 개발 로그(콘솔 전용 — 사용자에겐 보이지 않음)
   function log(label, ok, detail) {
-    const c = ok === true ? "#34d399" : ok === false ? "#f87171" : "#9AA4B2";
-    const mark = ok === true ? "✓" : ok === false ? "✗" : "·";
-    const row = document.createElement("div");
-    row.style.cssText = "margin:3px 0;word-break:break-all";
-    row.innerHTML =
-      `<span style="color:${c}">${mark}</span> <b>${label}</b>` +
-      (detail ? `<div style="color:#9AA4B2">${detail}</div>` : "");
-    panel().querySelector("#cmpoc-log").appendChild(row);
+    const mark = ok === true ? "OK" : ok === false ? "FAIL" : "·";
     console.log(TAG, mark, label, detail || "");
+  }
+
+  // 저장 진행 상태를 "콘텐츠 저장" 페이지로 보고
+  function reportSave(state, extra) {
+    try {
+      chrome.runtime.sendMessage({
+        type: "saveStatus",
+        state,
+        title: extra && extra.title,
+        error: extra && extra.error,
+      });
+    } catch (_) {
+      /* noop */
+    }
   }
 
   let lastPayload = null;
@@ -57,22 +79,29 @@
       b.onclick = fn;
       return b;
     };
-    wrap.appendChild(mk("ClipMiner Web 열기", () => chrome.runtime.sendMessage({ type: "openWeb" })));
+    wrap.appendChild(mk("라이브러리 열기", () => chrome.runtime.sendMessage({ type: "openWeb" })));
     wrap.appendChild(
-      mk("재등록 시도", () => {
+      mk("다시 시도", () => {
         if (lastPayload) chrome.runtime.sendMessage({ type: "registerToWeb", payload: lastPayload });
       }),
     );
     panel().querySelector("#cmpoc-log").appendChild(wrap);
   }
 
-  // Web 등록 결과 수신 (background → 이 Douyin 탭)
+  // 라이브러리 등록 결과 수신 (background → 이 Douyin 탭) — 사용자 언어로 표시 + 저장 페이지 보고
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg || msg.type !== "registerResult") return;
     const r = msg.result;
-    if (r && r.ok && r.status === "added") log("ClipMiner Web 등록", true, "완료 · " + r.title);
-    else if (r && r.ok && r.status === "duplicate") log("ClipMiner Web", null, "이미 등록됨 · " + r.title);
-    else log("ClipMiner Web 등록", false, (r && r.error) || "실패");
+    if (r && r.ok && r.status === "added") {
+      setStatus("저장 완료! 라이브러리에 추가되었습니다.", "ok");
+      reportSave("done", { title: r.title });
+    } else if (r && r.ok && r.status === "duplicate") {
+      setStatus("이미 저장된 영상이에요.", "ok");
+      reportSave("done", { title: r.title });
+    } else {
+      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
+      reportSave("error", { error: (r && r.error) || "등록 실패" });
+    }
   });
 
   function readEmbeddedData() {
@@ -184,6 +213,8 @@
 
   async function run() {
     panel().querySelector("#cmpoc-log").innerHTML = "";
+    setStatus("영상을 저장하고 있어요...", "info");
+    reportSave("saving");
 
     const onDouyin = /douyin\.com|iesdouyin\.com/.test(location.host);
     log("기준1) Douyin 컨텍스트", onDouyin, location.href.slice(0, 70));
@@ -201,6 +232,8 @@
     );
     if (!cands.length) {
       log("판정", false, "후보 없음 — 영상 URL 미발견");
+      setStatus("이 페이지에서 영상을 찾지 못했어요. 영상 페이지에서 다시 시도해주세요.", "error");
+      reportSave("error", { error: "영상을 찾지 못함" });
       return;
     }
 
@@ -225,7 +258,9 @@
     }
 
     if (!chosen) {
-      log("기준2) 영상 URL 선별", false, "영상 URL 없음 / 커버·이미지 URL만 발견 — 영상 페이지(/video/{id})에서 재시도 또는 네트워크 캡처 필요");
+      log("기준2) 영상 URL 선별", false, "영상 URL 없음 / 커버·이미지 URL만 발견");
+      setStatus("이 페이지에서 영상을 찾지 못했어요. 영상 페이지에서 다시 시도해주세요.", "error");
+      reportSave("error", { error: "영상 URL을 찾지 못함" });
       return;
     }
     log("기준2) 영상 URL 선별", true, `[${chosen.source}] ${chosen.url.slice(0, 100)}`);
@@ -235,15 +270,21 @@
     try {
       resp = await chrome.runtime.sendMessage({ type: "fetchVideo", url: chosen.url });
     } catch (e) {
-      log("기준4) 세션 fetch", false, "메시지 오류: " + e);
+      log("fetch", false, "메시지 오류: " + e);
+      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
+      reportSave("error", { error: "fetch 오류" });
       return;
     }
     if (!resp || !resp.ok) {
-      log("기준4) 세션 fetch", false, resp && resp.phase === "http" ? `HTTP ${resp.status}(403=서명 가능)` : (resp && resp.error) || "실패");
+      log("fetch", false, resp && resp.phase === "http" ? `HTTP ${resp.status}` : (resp && resp.error) || "실패");
+      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
+      reportSave("error", { error: (resp && resp.error) || "다운로드 실패" });
       return;
     }
     if (isImageCT(resp.contentType)) {
-      log("기준4) 영상 검증", false, "content-type이 image — 성공으로 인정하지 않음(커버 URL)");
+      log("영상 검증", false, "content-type image");
+      setStatus("영상이 아닌 이미지예요. 영상 페이지에서 다시 시도해주세요.", "error");
+      reportSave("error", { error: "영상이 아님" });
       return;
     }
     const blob = base64ToBlob(resp.b64, resp.contentType || "video/mp4");
@@ -271,20 +312,39 @@
     }
 
     if (r && r.reason === "sent") {
-      log("기준5·6) Web 전송됨", true, "ClipMiner Web에서 작업 폴더 저장+등록 진행(결과 대기)");
+      // 최종 결과는 registerResult 수신부에서 "저장 완료/실패"로 갱신
+      setStatus("저장 중... 라이브러리에 추가하고 있어요.", "info");
     } else if (r && r.reason === "web_closed") {
       saveLocally(blob, payload.localFileName);
-      log("mp4 저장(로컬)", true, payload.localFileName);
-      log("ClipMiner Web 등록", false, "ClipMiner Web이 열려 있지 않음");
+      log("local save", true, payload.localFileName);
+      setStatus("라이브러리를 열어두면 자동으로 추가돼요.", "error");
+      reportSave("error", { error: "라이브러리(/videos)를 열어두세요" });
       webButtons();
     } else {
       saveLocally(blob, payload.localFileName);
-      log("mp4 저장(로컬)", true, payload.localFileName);
-      log("Web 전송 실패", false, (r && r.error) || "?");
+      log("local save", true, payload.localFileName);
+      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
+      reportSave("error", { error: (r && r.error) || "전송 실패" });
       webButtons();
     }
   }
 
   panel();
-  console.log(TAG, "loaded. 영상 페이지에서 우측 하단 패널의 '추출 시도'를 누르세요.");
+  console.log(TAG, "loaded.");
+
+  // 자동 저장 대상 탭이면(= '콘텐츠 저장'에서 연 탭) 사용자 클릭 없이 자동 실행
+  (async () => {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "isAutoSave" });
+      if (res && res.auto) {
+        setStatus("영상을 저장할 준비 중...", "info");
+        // 페이지 데이터가 채워질 시간을 잠깐 준 뒤 실행
+        setTimeout(run, 1200);
+      } else {
+        setStatus("‘영상 저장’을 누르면 이 영상이 저장됩니다.", "info");
+      }
+    } catch (_) {
+      setStatus("‘영상 저장’을 누르면 이 영상이 저장됩니다.", "info");
+    }
+  })();
 })();
