@@ -1,19 +1,20 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-26 (Phase 0)
+> 최종 갱신: 2026-06-27 (Phase 1 진행 중)
 
 ---
 
 ## 현재 단계
 
-**Phase 0 — 설계 문서 안착**
+**Phase 1 — Next.js 초기화**
 
-설계 초안을 repo 문서로 정리하는 단계. **앱 구현은 시작하지 않았다.**
+웹 앱 골격을 구성하는 단계. Supabase/인증/수집 기능은 아직 구현하지 않는다.
 
 ---
 
 ## 완료
 
+### Phase 0 — 설계 문서 안착
 - [x] 핵심 결정사항 A~H 확정
 - [x] 설계 문서 안착 — `docs/DESIGN.md`
 - [x] DB 스키마 설계 — `docs/DB.md`
@@ -21,11 +22,22 @@
 - [x] 진행 상태 문서 — `docs/STATUS.md` (본 문서)
 - [x] `README.md`
 - [x] Claude 작업 가이드 — `CLAUDE.md`
+- [x] Git 저장소 초기화 / origin 연결 / Phase 0 문서 push
+      (commit `9485137` → `origin/main`)
 
-## 미완료 (의도적으로 보류 — Phase 1 이후)
+### Phase 1 — Next.js 초기화 (2026-06-27)
+- [x] Next.js 16 + TypeScript + App Router 초기화
+- [x] Tailwind v4 적용
+- [x] ESLint 기본 설정 (eslint-config-next)
+- [x] `src/` 구조 사용
+- [x] 기본 페이지 생성 (`src/app/page.tsx` — ClipMiner Web 골격)
+- [x] 기존 문서(README/CLAUDE/docs) 보존
+- [x] 검증: `npm install` / `npm run lint` / `npm run build` 통과
 
-- [ ] Git 저장소 초기화 / 원격 연결
-- [ ] Next.js 프로젝트 초기화
+> 스택: Next.js 16.2.9 · React 19.2.4 · Tailwind v4 · TypeScript 5
+
+## 미완료 (이후 단계)
+
 - [ ] Supabase 독립 프로젝트 생성 및 환경변수 확정
 - [ ] DB 마이그레이션 작성 (`videos` 테이블)
 - [ ] `cm_session` 발급/검증 연동 (homepage `/apps/clipminer` 진입 흐름)
@@ -37,8 +49,11 @@
 ## 환경 메모
 
 - 작업 폴더: `C:\projects\clipminer-web`
-- **현재 폴더는 비어 있고 git 저장소로 초기화되어 있지 않음** (Phase 0 문서가 첫 산출물).
-  → 사장님 측에서 원격 repo 연결/초기화 상태 확인 필요.
+- Git 저장소 초기화 완료, `origin` = https://github.com/cozybuilder/clipminer-web.git
+- Phase 1에서 추가된 의존성은 `node_modules/`(gitignore)로 관리.
+
+> 참고: `CLAUDE.md`의 "현재 단계" 표기는 Phase 0 작성 시점 기준이며,
+> Phase 1 전환 사실은 본 STATUS 문서를 기준으로 한다.
 
 ---
 
