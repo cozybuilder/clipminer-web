@@ -1,8 +1,9 @@
 "use client";
 
 // ClipMiner Web — Video Library.
-// ClipMiner Desktop(v0.1.1)의 보드형 레이아웃/디자인을 Web으로 이식.
-// 좌측 필터 사이드바 + 상단 툴바(검색/정렬/추가) + 9:16 쇼츠 카드 그리드 + 추가 모달.
+// ClipMiner Desktop(v0.1.1) 원본 사용감을 재현: 상단 헤더(로고/검색/정렬/추가) +
+// 상단 StatCard 필터(전체/미제작/제작중/제작완료) + 보조 태그 필터 라인 +
+// 9:16 쇼츠 카드 그리드 + 추가 모달.
 // 데이터는 IndexedDB(Dexie)에 저장(Local-First). 실제 영상 파일 저장은 범위 밖.
 
 import Link from "next/link";
@@ -13,8 +14,10 @@ import {
   Plus,
   Trash2,
   X,
-  Tag as TagIcon,
   ArrowDownUp,
+  Circle,
+  Clapperboard,
+  CheckCircle2,
 } from "lucide-react";
 import {
   VIDEO_STATUSES,
@@ -135,178 +138,167 @@ export default function VideoLibraryPage() {
     return sorted;
   }, [videos, statusFilter, tagFilter, query, sort]);
 
-  const statusNav: { key: StatusFilter; label: string }[] = [
-    { key: "all", label: "전체" },
-    { key: "idea", label: VIDEO_STATUS_LABELS.idea },
-    { key: "in_progress", label: VIDEO_STATUS_LABELS.in_progress },
-    { key: "done", label: VIDEO_STATUS_LABELS.done },
+  const stats: {
+    key: StatusFilter;
+    label: string;
+    icon: React.ReactNode;
+  }[] = [
+    { key: "all", label: "전체", icon: <Film size={18} /> },
+    { key: "idea", label: VIDEO_STATUS_LABELS.idea, icon: <Circle size={18} /> },
+    {
+      key: "in_progress",
+      label: VIDEO_STATUS_LABELS.in_progress,
+      icon: <Clapperboard size={18} />,
+    },
+    {
+      key: "done",
+      label: VIDEO_STATUS_LABELS.done,
+      icon: <CheckCircle2 size={18} />,
+    },
   ];
 
+  const activeLabel = stats.find((s) => s.key === statusFilter)?.label;
+
   return (
-    <div className="flex min-h-screen bg-background text-text">
-      {/* ───────── 좌측 사이드바 (필터) ───────── */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-background md:flex">
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 px-5 py-5"
-          title="홈으로"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Film size={16} className="text-white" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">ClipMiner</span>
-        </Link>
-
-        <nav className="px-3">
-          <p className="px-2 pb-2 text-xs font-medium uppercase tracking-widest text-subtext">
-            제작 상태
-          </p>
-          {statusNav.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setStatusFilter(item.key)}
-              className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                statusFilter === item.key
-                  ? "bg-primary/15 text-primary"
-                  : "text-subtext hover:bg-card hover:text-text"
-              }`}
-            >
-              <span>{item.label}</span>
-              <span className="text-xs opacity-70">{counts[item.key]}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="mt-4 px-3">
-          <p className="flex items-center gap-1.5 px-2 pb-2 text-xs font-medium uppercase tracking-widest text-subtext">
-            <TagIcon size={12} /> 태그
-          </p>
-          {tagList.length === 0 ? (
-            <p className="px-3 text-xs text-subtext/60">태그 없음</p>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {tagFilter && (
-                <button
-                  onClick={() => setTagFilter(null)}
-                  className="mb-1 self-start px-3 text-xs text-subtext hover:text-text"
-                >
-                  ✕ 태그 필터 해제
-                </button>
-              )}
-              {tagList.map(([name, n]) => (
-                <button
-                  key={name}
-                  onClick={() => setTagFilter(tagFilter === name ? null : name)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                    tagFilter === name
-                      ? "bg-primary/15 text-primary"
-                      : "text-subtext hover:bg-card hover:text-text"
-                  }`}
-                >
-                  <span className="truncate">#{name}</span>
-                  <span className="text-xs opacity-70">{n}</span>
-                </button>
-              ))}
+    <div className="flex min-h-screen flex-col bg-background text-text">
+      {/* ───────── 상단 헤더 (로고 / 검색 / 정렬 / 추가) ───────── */}
+      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-6 py-4">
+          <Link href="/" className="mr-2 flex shrink-0 items-center gap-2.5" title="홈으로">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <Film size={16} className="text-white" />
             </div>
-          )}
+            <span className="text-lg font-semibold tracking-tight">ClipMiner</span>
+          </Link>
+
+          <div className="relative max-w-md flex-1">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
+            />
+            <input
+              type="text"
+              placeholder="제목·태그·메모 검색..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-4 text-sm text-text placeholder:text-subtext transition-colors focus:border-primary/60 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex-1" />
+
+          <div className="relative hidden sm:block">
+            <ArrowDownUp
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="appearance-none rounded-xl border border-border bg-card py-2 pl-8 pr-8 text-sm text-text transition-colors focus:border-primary/60 focus:outline-none"
+            >
+              <option value="updated">최근 수정순</option>
+              <option value="created">등록 오래된순</option>
+              <option value="title">제목순</option>
+            </select>
+          </div>
+
+          <button
+            onClick={() => setAdding(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+          >
+            <Plus size={15} />
+            영상 추가
+          </button>
         </div>
-      </aside>
+      </header>
 
       {/* ───────── 메인 ───────── */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* 상단 툴바 */}
-        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
-          <div className="flex items-center gap-3 px-6 py-4">
-            <Link href="/" className="md:hidden" title="홈">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Film size={16} className="text-white" />
-              </div>
-            </Link>
+      <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-6 py-6">
+        {/* StatCard 필터 */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {stats.map((s) => (
+            <StatCard
+              key={s.key}
+              label={s.label}
+              value={counts[s.key]}
+              icon={s.icon}
+              active={statusFilter === s.key}
+              onClick={() => setStatusFilter(s.key)}
+            />
+          ))}
+        </div>
 
-            <div className="relative max-w-md flex-1">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
-              />
-              <input
-                type="text"
-                placeholder="제목·태그·메모 검색..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-4 text-sm text-text placeholder:text-subtext transition-colors focus:border-primary/60 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex-1" />
-
-            <div className="relative hidden sm:block">
-              <ArrowDownUp
-                size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtext"
-              />
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                className="appearance-none rounded-xl border border-border bg-card py-2 pl-8 pr-8 text-sm text-text transition-colors focus:border-primary/60 focus:outline-none"
-              >
-                <option value="updated">최근 수정순</option>
-                <option value="created">등록 오래된순</option>
-                <option value="title">제목순</option>
-              </select>
-            </div>
-
+        {/* 보조 태그 필터 라인 */}
+        {tagList.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-widest text-subtext">
+              태그
+            </span>
             <button
-              onClick={() => setAdding(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+              onClick={() => setTagFilter(null)}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                tagFilter === null
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-card text-subtext hover:text-text"
+              }`}
             >
-              <Plus size={15} />
-              영상 추가
+              전체
             </button>
+            {tagList.map(([name, n]) => (
+              <button
+                key={name}
+                onClick={() => setTagFilter(tagFilter === name ? null : name)}
+                className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                  tagFilter === name
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-border bg-card text-subtext hover:text-text"
+                }`}
+              >
+                #{name} <span className="opacity-60">{n}</span>
+              </button>
+            ))}
           </div>
-        </header>
+        )}
 
         {/* 결과 카운트 */}
-        <div className="px-6 pt-5">
+        <div className="flex items-center justify-between">
           <p className="text-sm text-subtext">
-            {query
-              ? `검색 결과 ${results.length}개`
-              : `${statusNav.find((s) => s.key === statusFilter)?.label} ${results.length}개`}
+            {query ? `검색 결과 ${results.length}개` : `${activeLabel} ${results.length}개`}
             {tagFilter && <span className="text-primary"> · #{tagFilter}</span>}
           </p>
         </div>
 
         {/* 그리드 */}
-        <main className="flex-1 px-6 py-5">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 text-subtext">
-              <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-              <p className="text-sm">영상 로딩 중...</p>
-            </div>
-          ) : videos.length === 0 ? (
-            <EmptyState
-              title="아직 저장된 영상이 없습니다"
-              desc="우측 상단 ‘영상 추가’로 첫 영상을 등록하세요. 데이터는 이 브라우저에 저장됩니다."
-            />
-          ) : results.length === 0 ? (
-            <EmptyState
-              title="조건에 맞는 영상이 없습니다"
-              desc="다른 키워드나 필터를 시도해보세요"
-            />
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {results.map((v) => (
-                <VideoCard
-                  key={v.id}
-                  video={v}
-                  onDelete={handleDelete}
-                  onStatusChange={handleStatusChange}
-                  onTagClick={setTagFilter}
-                />
-              ))}
-            </div>
-          )}
-        </main>
-      </div>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-subtext">
+            <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            <p className="text-sm">영상 로딩 중...</p>
+          </div>
+        ) : videos.length === 0 ? (
+          <EmptyState
+            title="아직 저장된 영상이 없습니다"
+            desc="우측 상단 ‘영상 추가’로 첫 영상을 등록하세요. 데이터는 이 브라우저에 저장됩니다."
+          />
+        ) : results.length === 0 ? (
+          <EmptyState
+            title="조건에 맞는 영상이 없습니다"
+            desc="다른 키워드나 필터를 시도해보세요"
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {results.map((v) => (
+              <VideoCard
+                key={v.id}
+                video={v}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+                onTagClick={setTagFilter}
+              />
+            ))}
+          </div>
+        )}
+      </main>
 
       {adding && (
         <AddVideoModal
@@ -318,6 +310,42 @@ export default function VideoLibraryPage() {
         />
       )}
     </div>
+  );
+}
+
+// ───────── StatCard (Desktop 원본 구조) ─────────
+function StatCard({
+  label,
+  value,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-4 rounded-card border bg-card p-4 text-left transition-colors hover:border-primary/60 ${
+        active ? "border-primary ring-1 ring-primary/40" : "border-border"
+      }`}
+    >
+      <div
+        className={`rounded-xl p-2.5 ${
+          active ? "bg-primary/15 text-primary" : "bg-border/60 text-subtext"
+        }`}
+      >
+        {icon}
+      </div>
+      <div>
+        <p className="mb-0.5 text-xs text-subtext">{label}</p>
+        <p className="text-xl font-semibold text-text">{value}</p>
+      </div>
+    </button>
   );
 }
 
@@ -340,9 +368,9 @@ function VideoCard({
       {/* 썸네일 (카드 중심) */}
       <div className="relative aspect-[9/16] overflow-hidden bg-border">
         {video.url ? (
-          // 외부 썸네일/링크 — next/image 대신 일반 img (도메인 비고정)
           <a href={video.url} target="_blank" rel="noopener noreferrer">
             {thumb ? (
+              // 외부 썸네일 — next/image 대신 일반 img (도메인 비고정)
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={thumb}

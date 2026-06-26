@@ -1,15 +1,15 @@
 # ClipMiner Web — 진행 상태 (STATUS)
 
-> 최종 갱신: 2026-06-27 (Phase 4-B Desktop 레이아웃 이식)
+> 최종 갱신: 2026-06-27 (Phase 4-C Desktop StatCard 필터 정합)
 
 ---
 
 ## 현재 단계
 
-**Phase 4-B — ClipMiner Desktop(v0.1.1) 보드형 UI 이식 완료.**
-`/videos`를 Desktop과 동일한 다크 보드형으로 재구성: 좌측 필터 사이드바(제작 상태/태그) +
-상단 툴바(검색/정렬/영상 추가) + 9:16 쇼츠 카드 그리드 + 추가 모달.
-데이터 계층(IndexedDB/Dexie)은 그대로 유지(스키마 무변경), 상태 라벨만 Desktop 표기로.
+**Phase 4-C — ClipMiner Desktop(v0.1.1) Dashboard 구조 정합 완료.**
+필터를 좌측 사이드바 → **상단 StatCard**(전체/미제작/제작중/제작완료) 구조로 변경(Desktop 원본 동일).
+상단 헤더(로고/검색/정렬/영상 추가) + StatCard 필터 + 보조 태그 필터 라인 + 9:16 쇼츠 카드 그리드 + 추가 모달.
+데이터 계층(IndexedDB/Dexie)·스키마는 무변경.
 
 실제 영상 파일 저장(로컬 폴더 / File System Access)은 다음 단계.
 
@@ -94,6 +94,15 @@
 - [x] 영상 추가 모달 (URL/제목/태그/메모/상태) — 등록 폼이 화면을 차지하지 않음
 - [x] 상태 라벨 Desktop 표기로 변경 (미제작/제작중/제작완료) — 스키마 값(idea/in_progress/done) 무변경
 - [x] 수동 검증: 추가/썸네일/상태변경/상태필터/태그필터/검색/삭제/새로고침 유지
+- [x] 검증: `npm run lint` / `npm run build` 통과
+
+### Phase 4-C — Desktop StatCard 필터 구조 정합 (2026-06-27)
+- [x] 좌측 사이드바 필터 제거
+- [x] 상단 StatCard 필터 구성 (전체/미제작/제작중/제작완료, 아이콘+카운트, active=primary ring) — Desktop StatCard 구조 동일
+- [x] 보조 태그 필터 라인 (StatCard 아래, 빈도순 칩 + "전체" 해제)
+- [x] 헤더: 로고 + 검색 + 정렬 + "영상 추가" (Desktop Dashboard 헤더 배치)
+- [x] 9:16 카드 그리드 / 카드 UI / 추가 모달 유지
+- [x] 수동 검증: StatCard 필터/태그 필터/검색/추가/상태변경/삭제/새로고침 유지
 - [x] 검증: `npm run lint` / `npm run build` 통과
 
 ## 미완료 (이후 단계)
