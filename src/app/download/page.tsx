@@ -33,7 +33,7 @@ type SaveState =
   | { kind: "dup"; title?: string }
   | { kind: "error"; text: string };
 
-const SAVE_TIMEOUT_MS = 25000;
+const SAVE_TIMEOUT_MS = 35000;
 
 export default function SavePage() {
   const [supported, setSupported] = useState(true);
@@ -44,7 +44,8 @@ export default function SavePage() {
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [setupOpen, setSetupOpen] = useState(false);
 
-  // 무한 대기 방지: 현재 저장 요청 id + timeout 핸들
+  // 저장 진행 추적: 활성 여부 + background가 부여한 requestId + timeout
+  const activeRef = useRef(false);
   const reqRef = useRef<string>("");
   const timeoutRef = useRef<number | null>(null);
   function clearSaveTimeout() {
@@ -86,20 +87,23 @@ export default function SavePage() {
       if (!d) return;
       if (d.type === "clipminer:connector-ready") setBrowserReady(true);
       if (d.type === "clipminer:save-status") {
-        // 이전(취소된) 요청의 지연 회신은 무시
-        if (d.requestId && d.requestId !== reqRef.current) return;
         if (d.state === "saving") {
-          setSave({ kind: "saving" });
-        } else if (d.state === "done") {
-          clearSaveTimeout();
-          setSave({ kind: "done", title: d.title });
-        } else if (d.state === "already_exists") {
-          clearSaveTimeout();
-          setSave({ kind: "dup", title: d.title });
-        } else if (d.state === "error") {
-          clearSaveTimeout();
-          setSave({ kind: "error", text: d.error || "저장에 실패했어요." });
+          // 진행 중일 때만, background가 부여한 requestId를 활성 요청으로 채택
+          if (activeRef.current) {
+            if (d.requestId) reqRef.current = d.requestId;
+            setSave({ kind: "saving" });
+          }
+          return;
         }
+        // 종료 상태: 활성 요청이 아니거나 다른 요청이면 무시(지연/취소 회신 방지)
+        if (!activeRef.current) return;
+        if (reqRef.current && d.requestId && d.requestId !== reqRef.current) return;
+        activeRef.current = false;
+        clearSaveTimeout();
+        if (d.state === "done") setSave({ kind: "done", title: d.title });
+        else if (d.state === "already_exists") setSave({ kind: "dup", title: d.title });
+        else if (d.state === "error")
+          setSave({ kind: "error", text: d.error || "저장에 실패했어요." });
       }
     };
     window.addEventListener("message", onMsg);
@@ -152,28 +156,25 @@ export default function SavePage() {
     }
 
     if (browserReady) {
-      // 확장이 새 탭을 열고 자동 저장 → 결과는 clipminer:save-status로 수신
-      const requestId =
-        (globalThis.crypto?.randomUUID?.() ?? "") || `${Date.now()}-${Math.random()}`;
-      reqRef.current = requestId;
+      // 확장이 백그라운드에서 자동 저장 → 결과는 clipminer:save-status로 수신
+      // requestId는 background가 생성/관리 → 다음 'saving' 상태에서 채택
+      activeRef.current = true;
+      reqRef.current = "";
       setSave({ kind: "saving" });
-      window.postMessage({ type: "clipminer:save", url: full, requestId }, "*");
-      // 무한 대기 방지: 25초 안에 done/error 없으면 안내 + 버튼 원복
+      window.postMessage({ type: "clipminer:save", url: full }, "*");
+      // 무한 대기 방지: 시간 내 결과 없으면 안내 + 버튼 원복
       clearSaveTimeout();
       timeoutRef.current = window.setTimeout(() => {
+        if (!activeRef.current) return;
+        activeRef.current = false;
         setSave((prev) =>
           prev.kind === "saving"
-            ? {
-                kind: "error",
-                text:
-                  "자동 저장이 완료되지 않았습니다. 열린 Douyin 페이지에서 보라색 [영상 저장] 버튼을 눌러주세요.",
-              }
+            ? { kind: "error", text: "저장에 시간이 너무 오래 걸려요. 잠시 후 다시 시도해주세요." }
             : prev,
         );
       }, SAVE_TIMEOUT_MS);
     } else {
-      // 확장 미설치 — 링크만 열고 설정 안내
-      window.open(full, "_blank", "noopener,noreferrer");
+      // 확장 미설치 — Douyin 페이지를 열지 않고 설정만 안내(사용자는 영상 페이지를 직접 열지 않는다)
       setSave({
         kind: "error",
         text: "브라우저 확장을 설치하면 자동으로 저장됩니다. 아래 ‘처음 한 번만 설정하세요’를 확인하세요.",

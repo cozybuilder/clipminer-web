@@ -88,19 +88,31 @@
     panel().querySelector("#cmpoc-log").appendChild(wrap);
   }
 
-  // 라이브러리 등록 결과 수신 (background → 이 Douyin 탭) — 사용자 언어로 표시 + 저장 페이지 보고
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (!msg || msg.type !== "registerResult") return;
-    const r = msg.result;
-    if (r && r.ok && r.status === "added") {
-      setStatus("저장 완료! 라이브러리에 추가되었습니다.", "ok");
-      reportSave("done", { title: r.title });
-    } else if (r && r.ok && r.status === "duplicate") {
-      setStatus("이미 저장된 영상이에요.", "ok");
-      reportSave("already_exists", { title: r.title });
-    } else {
-      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
-      reportSave("error", { error: (r && r.error) || "등록 실패" });
+  // background ↔ content: 핸드셰이크(ping) / 저장 명령(save) / 등록 결과(registerResult)
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!msg) return;
+    if (msg.type === "ping") {
+      sendResponse({ ready: true });
+      return; // 동기 응답
+    }
+    if (msg.type === "save") {
+      // background 명령으로 자동 저장 실행 (사용자 클릭 불필요)
+      run();
+      return;
+    }
+    if (msg.type === "registerResult") {
+      const r = msg.result;
+      if (r && r.ok && r.status === "added") {
+        setStatus("저장 완료! 라이브러리에 추가되었습니다.", "ok");
+        reportSave("done", { title: r.title });
+      } else if (r && r.ok && r.status === "duplicate") {
+        setStatus("이미 저장된 영상이에요.", "ok");
+        reportSave("already_exists", { title: r.title });
+      } else {
+        setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
+        reportSave("error", { error: (r && r.error) || "등록 실패" });
+      }
+      return;
     }
   });
 
@@ -211,7 +223,18 @@
     }
   };
 
+  let running = false;
   async function run() {
+    if (running) return; // 중복 실행 방지
+    running = true;
+    try {
+      await doRun();
+    } finally {
+      running = false;
+    }
+  }
+
+  async function doRun() {
     panel().querySelector("#cmpoc-log").innerHTML = "";
     setStatus("영상을 저장하고 있어요...", "info");
     reportSave("saving");
@@ -219,20 +242,22 @@
     const onDouyin = /douyin\.com|iesdouyin\.com/.test(location.host);
     log("기준1) Douyin 컨텍스트", onDouyin, location.href.slice(0, 70));
 
-    const embedded = readEmbeddedData();
+    // 백그라운드 탭에서 SPA 데이터가 늦게 채워질 수 있어 후보가 없으면 잠시 후 재시도
+    let embedded = readEmbeddedData();
+    let title = extractTitle(embedded);
+    let cands = collectCandidates(embedded);
+    for (let i = 0; i < 4 && cands.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 1200));
+      embedded = readEmbeddedData();
+      title = extractTitle(embedded);
+      cands = collectCandidates(embedded);
+    }
     log("페이지 내장 데이터", Object.keys(embedded).length > 0, "sources: " + (Object.keys(embedded).join(", ") || "없음"));
-
-    const title = extractTitle(embedded);
     log("기준3) 제목 추출", !!title, title ? JSON.stringify(title).slice(0, 120) : "실패");
-
-    const cands = collectCandidates(embedded);
-    log("기준2) 후보 URL", cands.length > 0, cands.length + "개 (이미지 확장자/이미지 키 제외)");
-    cands.slice(0, 12).forEach((c, i) =>
-      log(`  #${i + 1} [${c.source}]`, null, c.url.slice(0, 110)),
-    );
+    log("기준2) 후보 URL", cands.length > 0, cands.length + "개");
     if (!cands.length) {
       log("판정", false, "후보 없음 — 영상 URL 미발견");
-      setStatus("이 페이지에서 영상을 찾지 못했어요. 영상 페이지에서 다시 시도해주세요.", "error");
+      setStatus("영상을 찾지 못했어요. 영상 링크인지 확인해 주세요.", "error");
       reportSave("error", { error: "영상을 찾지 못함" });
       return;
     }
@@ -330,21 +355,7 @@
   }
 
   panel();
-  console.log(TAG, "loaded.");
-
-  // 자동 저장 대상 탭이면(= '콘텐츠 저장'에서 연 탭) 사용자 클릭 없이 자동 실행
-  (async () => {
-    try {
-      const res = await chrome.runtime.sendMessage({ type: "isAutoSave" });
-      if (res && res.auto) {
-        setStatus("영상을 저장할 준비 중...", "info");
-        // 페이지 데이터가 채워질 시간을 잠깐 준 뒤 실행
-        setTimeout(run, 1200);
-      } else {
-        setStatus("‘영상 저장’을 누르면 이 영상이 저장됩니다.", "info");
-      }
-    } catch (_) {
-      setStatus("‘영상 저장’을 누르면 이 영상이 저장됩니다.", "info");
-    }
-  })();
+  setStatus("준비됨", "info");
+  console.log(TAG, "loaded — background 'save' 명령 대기");
+  // 자동 실행은 background가 핸드셰이크 후 'save' 명령으로 트리거한다(사용자 클릭 불필요).
 })();
