@@ -18,6 +18,8 @@ import {
   Download,
   Package,
   Puzzle,
+  Check,
+  X,
 } from "lucide-react";
 
 // 배포용 확장 ZIP (public/ 정적 파일 → npm run build:ext 로 생성)
@@ -374,104 +376,96 @@ export default function SavePage() {
           </button>
 
           {setupOpen && (
-            <div className="space-y-5 border-t border-border px-4 py-5">
-              {/* STEP 1 — 작업 폴더 */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  1
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text">영상을 저장할 폴더를 선택합니다.</p>
-                  <p className="mt-0.5 text-xs text-subtext">저장된 영상이 이 폴더에 모입니다.</p>
+            <div className="border-t border-border px-4 py-5">
+              {/* 설치 6단계 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
+                  <p className="flex-1 text-sm text-text">작업 폴더를 선택합니다.</p>
                   {!wsConnected ? (
                     <button
                       onClick={handleSelectFolder}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
                     >
-                      <FolderOpen size={13} /> 작업 폴더 선택
+                      <FolderOpen size={13} /> 폴더 선택
                     </button>
                   ) : (
-                    <span className="mt-2 inline-flex items-center gap-1 text-xs text-primary">
-                      <CheckCircle2 size={13} /> 폴더 연결됨
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-primary">
+                      <CheckCircle2 size={13} /> 연결됨
                     </span>
                   )}
                 </div>
-              </div>
 
-              {/* STEP 2 — ZIP 다운로드 */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  2
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text">ClipMiner 확장 ZIP 파일을 받습니다.</p>
-                  <p className="mt-0.5 text-xs text-subtext">받은 ZIP을 압축 해제하면 <b className="text-text">ClipMiner</b> 폴더가 생깁니다.</p>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
+                  <p className="flex-1 text-sm text-text"><b className="text-text">[확장 프로그램 다운로드]</b> 버튼을 누릅니다.</p>
                   <a
                     href={EXTENSION_ZIP_URL}
                     download
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
                   >
-                    <Download size={13} /> 확장 ZIP 다운로드
+                    <Download size={13} /> 확장 프로그램 다운로드
                   </a>
                 </div>
-              </div>
 
-              {/* STEP 3 — chrome://extensions */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  3
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text">Chrome 주소창에 입력해 확장 관리 화면을 엽니다.</p>
-                  <code className="mt-1.5 inline-block rounded-md bg-background px-2 py-1 text-xs text-primary select-all">
-                    chrome://extensions
-                  </code>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">3</span>
+                  <p className="flex-1 text-sm text-text">
+                    크롬 검색창에 입력합니다.{" "}
+                    <code className="rounded-md bg-background px-1.5 py-0.5 text-xs text-primary select-all">chrome://extensions</code>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">4</span>
+                  <p className="flex-1 text-sm text-text">오른쪽 위 <b className="text-text">[개발자 모드]</b>를 켭니다.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">5</span>
+                  <p className="flex-1 text-sm text-text"><b className="text-text">[압축해제된 확장 프로그램 로드]</b>를 누릅니다.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">6</span>
+                  <p className="flex-1 text-sm text-text">압축을 푼 <b className="text-text">ClipMiner</b> 폴더를 선택합니다.</p>
                 </div>
               </div>
 
-              {/* STEP 4 — 개발자 모드 */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  4
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text">우측 상단의 <b className="text-text">개발자 모드</b>를 켭니다.</p>
-                </div>
-              </div>
-
-              {/* STEP 5 — 압축해제된 확장 로드 */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  5
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text"><b className="text-text">[압축해제된 확장 프로그램을 로드합니다]</b> 버튼을 누릅니다.</p>
-                </div>
-              </div>
-
-              {/* STEP 6 — 폴더 선택 */}
-              <div className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  6
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text">압축을 해제한 <b className="text-text">ClipMiner</b> 폴더를 선택합니다.</p>
-                  <p className="mt-0.5 text-xs text-subtext">화면 상단에 <b className="text-text">브라우저 준비 완료</b>가 뜨면 설치 완료입니다.</p>
-                </div>
-              </div>
-
-              {/* 마무리 강조 */}
-              <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
-                <p className="text-sm font-medium text-text">
-                  설치 후에는 영상 링크를 붙여넣고 <b className="text-primary">영상 저장하기</b> 버튼만 누르면 자동으로 저장됩니다.
+              {/* 마무리 */}
+              <div className="mt-4 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                <p className="text-sm font-semibold text-text">끝!</p>
+                <p className="mt-1 text-sm text-text">
+                  이제부터는 영상 링크를 붙여넣고 <b className="text-primary">[영상 저장하기]</b>만 누르면 됩니다.
                 </p>
               </div>
 
-              {!supported && (
-                <p className="text-xs text-amber-400">
-                  이 브라우저는 폴더 저장을 지원하지 않습니다. Chrome·Edge를 사용하세요.
-                </p>
-              )}
+              {/* 지원 브라우저 */}
+              <div className="mt-5 border-t border-border pt-4">
+                <p className="text-xs font-semibold text-subtext">지원 브라우저</p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text">
+                  <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Chrome</span>
+                  <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Edge</span>
+                  <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Brave</span>
+                  <span className="inline-flex items-center gap-1 text-subtext"><X size={14} className="text-subtext/70" /> Safari</span>
+                  <span className="inline-flex items-center gap-1 text-subtext"><X size={14} className="text-subtext/70" /> Firefox</span>
+                </div>
+              </div>
+
+              {/* 주의사항 */}
+              <div className="mt-5 border-t border-border pt-4">
+                <p className="text-xs font-semibold text-subtext">주의사항</p>
+                <ul className="mt-2 space-y-1 text-sm text-subtext">
+                  <li>처음 한 번만 설정하면 됩니다.</li>
+                  <li>영상은 작업 폴더에만 저장됩니다.</li>
+                  <li>Chrome 또는 Edge 사용을 권장합니다.</li>
+                </ul>
+                {!supported && (
+                  <p className="mt-2 text-xs text-amber-400">
+                    현재 브라우저는 폴더 저장을 지원하지 않습니다. Chrome·Edge·Brave를 사용하세요.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
