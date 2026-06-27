@@ -17,6 +17,10 @@ window.addEventListener("message", (e) => {
   if (d.type === "clipminer:save" && d.url) {
     chrome.runtime.sendMessage({ type: "saveDouyin", url: d.url, requestId: d.requestId });
   }
+  // 페이지("콘텐츠 저장") → background: 작업 폴더 저장 결과(백그라운드 Douyin 탭 정리)
+  if (d.type === "clipminer:save-result") {
+    chrome.runtime.sendMessage({ type: "pageSaveResult", requestId: d.requestId, state: d.state });
+  }
 });
 announce();
 
@@ -25,6 +29,13 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (!msg) return;
   if (msg.type === "register" && msg.payload) {
     window.postMessage({ type: "clipminer:register", payload: msg.payload }, "*");
+  }
+  // background → "콘텐츠 저장" 페이지: mp4 payload(작업 폴더 저장은 페이지가 수행)
+  if (msg.type === "registerPayloadToPage" && msg.payload) {
+    window.postMessage(
+      { type: "clipminer:register-payload", requestId: msg.requestId, payload: msg.payload },
+      "*",
+    );
   }
   // 저장 진행 상태 → 페이지(사용자 언어)
   if (msg.type === "saveStatusToPage") {

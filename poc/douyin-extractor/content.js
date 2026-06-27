@@ -58,8 +58,8 @@
     }
   }
 
-  let lastPayload = null;
-  // 저장은 작업 폴더(File System Access)에만. 브라우저 다운로드(<a download>/chrome.downloads) 사용 안 함.
+  // 저장은 /download 페이지의 작업 폴더(File System Access)에만.
+  // 브라우저 다운로드(<a download>/chrome.downloads)는 사용하지 않음.
 
   // background ↔ content: 핸드셰이크(ping) / 저장 명령(save) / 등록 결과(registerResult)
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -71,20 +71,6 @@
     if (msg.type === "save") {
       // background 명령으로 자동 저장 실행 (사용자 클릭 불필요)
       run();
-      return;
-    }
-    if (msg.type === "registerResult") {
-      const r = msg.result;
-      if (r && r.ok && r.status === "added") {
-        setStatus("저장 완료! 라이브러리에 추가되었습니다.", "ok");
-        reportSave("done", { title: r.title });
-      } else if (r && r.ok && r.status === "duplicate") {
-        setStatus("이미 저장된 영상이에요.", "ok");
-        reportSave("already_exists", { title: r.title });
-      } else {
-        setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
-        reportSave("error", { error: (r && r.error) || "등록 실패" });
-      }
       return;
     }
   });
@@ -288,7 +274,9 @@
     const blob = base64ToBlob(resp.b64, resp.contentType || "video/mp4");
     log("기준4) Blob 생성", blob.size > 0, `size: ${blob.size.toLocaleString()} bytes · type: ${resp.contentType || "?"}`);
 
-    // ClipMiner Web으로 등록 payload 전송 (Web이 작업 폴더 저장 + 라이브러리 등록)
+    // mp4 bytes를 "콘텐츠 저장"(/download) 페이지로 회신한다.
+    // 실제 작업 폴더 저장 + 라이브러리 등록은 /download 페이지가 직접 수행한다
+    // (/videos 탭에 의존하지 않음). 브라우저 다운로드 폴더는 사용하지 않는다.
     const payload = {
       platform: "douyin",
       originalTitle: title,
@@ -299,25 +287,21 @@
       mimeType: resp.contentType || "video/mp4",
       bytesBase64: resp.b64,
     };
-    lastPayload = payload;
 
-    log("ClipMiner Web 전송", null, "등록 요청...");
+    log("콘텐츠 저장 페이지로 회신", null, "payload 전송...");
     let r;
     try {
-      r = await chrome.runtime.sendMessage({ type: "registerToWeb", payload });
+      r = await chrome.runtime.sendMessage({ type: "registerToPage", payload });
     } catch (e) {
-      r = { ok: false, reason: "bridge_error", error: String(e) };
+      r = { ok: false, error: String(e) };
     }
 
-    // 저장은 작업 폴더(File System Access)에만 — 브라우저 다운로드 폴더 사용 금지.
-    if (r && r.reason === "sent") {
-      // 최종 결과는 registerResult 수신부에서 "저장 완료/실패"로 갱신
+    if (r && r.ok) {
+      // 최종 결과(저장 완료/실패)는 /download 페이지가 표시한다.
       setStatus("저장 중... 라이브러리에 추가하고 있어요.", "info");
     } else {
       setStatus("저장에 실패했어요. 잠시 후 다시 시도해주세요.", "error");
-      reportSave("error", {
-        error: (r && (r.error || r.reason)) || "라이브러리 연결 실패",
-      });
+      reportSave("error", { error: (r && r.error) || "콘텐츠 저장 페이지 연결 실패" });
     }
   }
 

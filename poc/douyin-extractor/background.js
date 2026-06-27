@@ -13,11 +13,9 @@ function abToBase64(ab) {
   return btoa(bin);
 }
 
-// ClipMiner Web 라이브러리 탭 매칭/열기 (등록 수신부는 /videos 페이지)
-const WEB_MATCHES = ["http://localhost:3000/videos*", "https://clipminer.cozybuilder.co.kr/videos*"];
+// ClipMiner Web 라이브러리 탭 열기용 (저장은 /download 페이지가 담당)
 const WEB_OPEN_URL = "http://localhost:3000/videos";
-let pendingDouyinTab = null; // 단일 흐름: 마지막 Douyin 탭으로 등록 결과 회신
-let saveStatusTab = null; // "콘텐츠 저장" 페이지 탭(진행 상태 회신 대상)
+let saveStatusTab = null; // "콘텐츠 저장"(/download) 페이지 탭(진행 상태/저장 payload 회신 대상)
 const tabSave = new Map(); // douyinTabId -> { requestId, watchdog, done }
 
 const OVERALL_TIMEOUT_MS = 30000;
@@ -47,41 +45,13 @@ function finishSave(tabId, removeTab) {
   if (removeTab) chrome.tabs.remove(tabId).catch(() => {});
 }
 
-function delay(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// 탭 로딩 완료 대기 (타임아웃 시 false)
-function waitTabComplete(tabId, timeoutMs) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const onUpd = (id, info) => {
-      if (id === tabId && info.status === "complete") {
-        settled = true;
-        chrome.tabs.onUpdated.removeListener(onUpd);
-        resolve(true);
-      }
-    };
-    chrome.tabs.onUpdated.addListener(onUpd);
-    setTimeout(() => {
-      if (!settled) {
-        chrome.tabs.onUpdated.removeListener(onUpd);
-        resolve(false);
-      }
-    }, timeoutMs || 12000);
-  });
-}
-
-// 라이브러리(/videos) 탭 확보 — 열려 있으면 그 탭, 없으면 백그라운드로 새로 연다.
-// 작업 폴더 저장은 /videos 페이지에서 일어나므로 등록 대상 탭이 반드시 있어야 한다.
-async function ensureLibraryTab() {
-  const tabs = await chrome.tabs.query({ url: WEB_MATCHES });
-  if (tabs.length) return tabs[0].id;
-  const created = await new Promise((res) => chrome.tabs.create({ url: WEB_OPEN_URL, active: false }, res));
-  if (!created || created.id == null) return null;
-  await waitTabComplete(created.id, 12000);
-  await delay(1000); // React 마운트 + web-bridge 리스너 준비 여유
-  return created.id;
+// requestId로 해당 Douyin 백그라운드 탭 찾기 (저장 결과 회신 시 정리용)
+function tabIdByRequest(requestId) {
+  if (!requestId) return null;
+  for (const [tabId, info] of tabSave) {
+    if (info && info.requestId === requestId) return tabId;
+  }
+  return null;
 }
 
 // 핸드셰이크: content script가 준비됐는지 ping → 없으면 강제 주입 → save 명령
@@ -175,36 +145,34 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return false;
   }
 
-  // Douyin content → Web(/videos) 탭으로 등록 payload 전달.
-  // /videos가 닫혀 있으면 백그라운드로 자동으로 열어 작업 폴더 저장이 항상 일어나게 한다.
-  if (msg && msg.type === "registerToWeb") {
+  // Douyin content → "콘텐츠 저장"(/download) 페이지로 mp4 payload 회신.
+  // 작업 폴더 저장 + 라이브러리 등록은 /download 페이지가 직접 수행한다(/videos 탭 비의존).
+  if (msg && msg.type === "registerToPage") {
     (async () => {
-      const libTabId = await ensureLibraryTab();
-      if (libTabId == null) {
-        sendResponse({ ok: false, reason: "web_closed" });
+      if (saveStatusTab == null) {
+        sendResponse({ ok: false, error: "save_page_closed" });
         return;
       }
-      pendingDouyinTab = _sender && _sender.tab ? _sender.tab.id : null;
-      // 페이지 리스너가 아직 준비 전일 수 있어 짧게 재시도
-      let lastErr = null;
-      for (let i = 0; i < 3; i++) {
-        try {
-          await chrome.tabs.sendMessage(libTabId, { type: "register", payload: msg.payload });
-          sendResponse({ ok: true, reason: "sent" });
-          return;
-        } catch (e) {
-          lastErr = e;
-          await delay(700);
-        }
+      const douyinTabId = _sender && _sender.tab ? _sender.tab.id : null;
+      const info = douyinTabId != null ? tabSave.get(douyinTabId) : null;
+      const requestId = info ? info.requestId : null;
+      try {
+        await chrome.tabs.sendMessage(saveStatusTab, {
+          type: "registerPayloadToPage",
+          requestId,
+          payload: msg.payload,
+        });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
       }
-      sendResponse({ ok: false, reason: "bridge_error", error: String(lastErr && lastErr.message ? lastErr.message : lastErr) });
     })();
     return true;
   }
-  // Web → Douyin 탭으로 등록 결과 회신
-  if (msg && msg.type === "registerResult") {
-    if (pendingDouyinTab != null)
-      chrome.tabs.sendMessage(pendingDouyinTab, { type: "registerResult", result: msg.result }).catch(() => {});
+  // /download → 저장 결과 회신: 해당 Douyin 백그라운드 탭 정리
+  if (msg && msg.type === "pageSaveResult") {
+    const tabId = tabIdByRequest(msg.requestId);
+    if (tabId != null) finishSave(tabId, true);
     return false;
   }
   // ClipMiner Web 열기

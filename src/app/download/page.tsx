@@ -25,6 +25,8 @@ import {
   queryWorkspacePermission,
   type Workspace,
 } from "@/lib/workspace";
+import { registerFromConnector, type ConnectorPayload } from "@/lib/connector";
+import { listVideos } from "@/lib/videos";
 
 type SaveState =
   | { kind: "idle" }
@@ -48,6 +50,8 @@ export default function SavePage() {
   const activeRef = useRef(false);
   const reqRef = useRef<string>("");
   const timeoutRef = useRef<number | null>(null);
+  // 메시지 핸들러(useEffect[])에서 최신 작업 폴더 핸들을 읽기 위한 ref
+  const workspaceRef = useRef<Workspace | null>(null);
   function clearSaveTimeout() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -56,6 +60,10 @@ export default function SavePage() {
   }
 
   const wsConnected = !!workspace && perm === "granted";
+
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
 
   useEffect(() => {
     let active = true;
@@ -76,6 +84,47 @@ export default function SavePage() {
 
   // 브라우저 준비 여부(확장 존재) 감지 + 저장 상태 수신 — 모두 사용자 언어로 표기
   useEffect(() => {
+    // background로 저장 결과 회신(백그라운드 Douyin 탭 정리) + 종료 상태 표시
+    const finishLocalSave = (requestId: string | undefined, st: SaveState) => {
+      activeRef.current = false;
+      clearSaveTimeout();
+      setSave(st);
+      const state =
+        st.kind === "done" ? "done" : st.kind === "dup" ? "already_exists" : "error";
+      window.postMessage({ type: "clipminer:save-result", requestId, state }, "*");
+    };
+
+    // 확장이 회신한 mp4 payload → /download가 작업 폴더에 직접 저장 + 라이브러리 등록
+    const handleRegisterPayload = async (
+      requestId: string | undefined,
+      payload: ConnectorPayload,
+    ) => {
+      const ws = workspaceRef.current;
+      if (!ws) {
+        finishLocalSave(requestId, { kind: "error", text: "작업 폴더가 연결되지 않았어요." });
+        return;
+      }
+      try {
+        const existing = await listVideos();
+        const res = await registerFromConnector(payload, { workspace: ws, existing });
+        if (res.ok && res.status === "added") {
+          finishLocalSave(requestId, { kind: "done", title: res.title });
+        } else if (res.ok && res.status === "duplicate") {
+          finishLocalSave(requestId, { kind: "dup", title: res.title });
+        } else {
+          finishLocalSave(requestId, {
+            kind: "error",
+            text: (!res.ok && res.error) || "저장에 실패했어요.",
+          });
+        }
+      } catch (err) {
+        finishLocalSave(requestId, {
+          kind: "error",
+          text: err instanceof Error ? err.message : "저장 중 오류가 발생했어요.",
+        });
+      }
+    };
+
     const onMsg = (e: MessageEvent) => {
       const d = e.data as {
         type?: string;
@@ -83,9 +132,17 @@ export default function SavePage() {
         title?: string;
         error?: string;
         requestId?: string;
+        payload?: ConnectorPayload;
       };
       if (!d) return;
       if (d.type === "clipminer:connector-ready") setBrowserReady(true);
+      // 확장이 mp4 bytes를 회신 → 작업 폴더 저장 + 등록은 이 페이지가 직접 수행
+      if (d.type === "clipminer:register-payload" && d.payload) {
+        if (!activeRef.current) return;
+        if (reqRef.current && d.requestId && d.requestId !== reqRef.current) return;
+        void handleRegisterPayload(d.requestId || reqRef.current, d.payload);
+        return;
+      }
       if (d.type === "clipminer:save-status") {
         if (d.state === "saving") {
           // 진행 중일 때만, background가 부여한 requestId를 활성 요청으로 채택
