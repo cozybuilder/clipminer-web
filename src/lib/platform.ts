@@ -36,6 +36,30 @@ export function detectPlatform(url: string): Platform {
   return "other";
 }
 
+/**
+ * 영상 고유 ID 추출 (중복 판정 기준). 우선순위:
+ *   1) 경로 /video/{id} · /share/video/{id} · /note/{id}
+ *   2) 쿼리 modal_id · aweme_id · vid
+ * Douyin aweme_id 는 긴 숫자(보통 19자리)라 6자리 이상 숫자만 인정.
+ * 없으면 null → 호출부에서 정규화 URL fallback.
+ */
+export function extractVideoId(url: string): string | null {
+  if (!url) return null;
+  const path = url.match(/\/(?:video|note)\/(\d{6,})/);
+  if (path) return path[1];
+  try {
+    const sp = new URL(url).searchParams;
+    for (const k of ["modal_id", "aweme_id", "vid"]) {
+      const v = sp.get(k);
+      if (v && /^\d{6,}$/.test(v)) return v;
+    }
+  } catch {
+    /* URL 파싱 실패 → 정규식 폴백 */
+  }
+  const q = url.match(/[?&](?:modal_id|aweme_id|vid)=(\d{6,})/);
+  return q ? q[1] : null;
+}
+
 /** Douyin URL의 modal_id(숫자 영상 ID) 추출. 없으면 null. (Desktop 포팅) */
 function extractDouyinModalId(url: string): string | null {
   try {

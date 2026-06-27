@@ -10,6 +10,7 @@
 import { addVideo } from "./videos";
 import { ensureWritePermission, saveFileToWorkspace, type Workspace } from "./workspace";
 import { toKoreanTitle, extractHashtags } from "./titleTranslate";
+import { extractVideoId, normalizeDownloadUrl } from "./platform";
 import type { VideoItem } from "./types";
 
 export const CONNECTOR_MSG = "clipminer:register";
@@ -67,13 +68,31 @@ export async function registerFromConnector(
 
   const original = (payload.originalTitle || "").trim();
 
-  // 중복 방지: sourceUrl 또는 localFileName 일치
-  const dup = ctx.existing.find(
-    (v) =>
-      (payload.sourceUrl && v.url === payload.sourceUrl) ||
-      (payload.localFileName && v.localFileName === payload.localFileName),
-  );
+  // 중복 방지: 영상 고유 ID(aweme_id/modal_id) 우선, 없으면 정규화 URL fallback.
+  // (제목 기반 localFileName 일치로 판정하던 기존 방식은 서로 다른 영상을 오판해 제거)
+  const payloadId = extractVideoId(payload.sourceUrl || "");
+  const payloadNorm = normalizeDownloadUrl((payload.sourceUrl || "").trim());
+  let dupBasis = "";
+  const dup = ctx.existing.find((v) => {
+    const vId = extractVideoId(v.url || "");
+    // 양쪽 모두 영상 ID가 있으면 ID로만 비교 → 서로 다른 ID는 절대 중복 아님
+    if (payloadId && vId) {
+      if (payloadId === vId) {
+        dupBasis = `videoId=${payloadId}`;
+        return true;
+      }
+      return false;
+    }
+    // 한쪽이라도 ID가 없으면 정규화 URL 비교 (기존 데이터 fallback)
+    if (payloadNorm && normalizeDownloadUrl((v.url || "").trim()) === payloadNorm) {
+      dupBasis = `normalizedUrl=${payloadNorm}`;
+      return true;
+    }
+    return false;
+  });
   if (dup) {
+    // 개발 로그: 어떤 기준으로 중복 판정했는지(사용자 UI 비노출)
+    console.log(`[ClipMiner] 중복 판정 (${dupBasis}) → 기존 레코드 ${dup.id}`);
     return {
       ok: true,
       status: "duplicate",
@@ -81,6 +100,12 @@ export async function registerFromConnector(
       title: dup.translatedTitle || dup.originalTitle || dup.title,
     };
   }
+
+  // 저장 파일명 고유화: 영상 ID가 있으면 파일명에 부착해 서로 다른 영상이
+  // 같은 파일명(예: 제목 추출 실패 시 douyin.mp4)으로 덮어쓰는 것을 방지.
+  const localName = payloadId
+    ? payload.localFileName.replace(/(\.[^.]+)?$/, (ext) => `_${payloadId}${ext || ".mp4"}`)
+    : payload.localFileName;
 
   // 3) 작업 폴더 저장 (없으면 등록하지 않음)
   if (!ctx.workspace) return { ok: false, error: "작업 폴더가 연결되지 않았습니다" };
@@ -95,7 +120,7 @@ export async function registerFromConnector(
     return { ok: false, error: "파일 데이터 디코딩 실패" };
   }
   try {
-    await saveFileToWorkspace(ctx.workspace.handle, payload.localFileName, blob);
+    await saveFileToWorkspace(ctx.workspace.handle, localName, blob);
   } catch (e) {
     return { ok: false, error: "작업 폴더 저장 실패: " + (e instanceof Error ? e.message : String(e)) };
   }
@@ -118,7 +143,7 @@ export async function registerFromConnector(
       tags,
       note: payload.memo || "",
       status: "idea", // unproduced = 미제작
-      localFileName: payload.localFileName,
+      localFileName: localName,
       localFileType: mt || "video/mp4",
       localFileSize: payload.fileSize || blob.size,
     });
