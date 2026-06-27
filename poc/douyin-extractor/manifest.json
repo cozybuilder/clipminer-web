@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "ClipMiner PoC — Douyin Extractor",
   "version": "0.1.0",
-  "description": "Douyin 영상 추출(content-type 검증) → mp4 → ClipMiner Web 라이브러리 자동 등록. 로컬 unpacked, Chrome.",
-  "permissions": ["downloads", "tabs", "scripting"],
+  "description": "Douyin 영상 → mp4 → ClipMiner Web 작업 폴더 저장 + 라이브러리 자동 등록. 로컬 unpacked, Chrome.",
+  "permissions": ["tabs", "scripting"],
   "host_permissions": ["https://*/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [

@@ -47,6 +47,43 @@ function finishSave(tabId, removeTab) {
   if (removeTab) chrome.tabs.remove(tabId).catch(() => {});
 }
 
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// 탭 로딩 완료 대기 (타임아웃 시 false)
+function waitTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const onUpd = (id, info) => {
+      if (id === tabId && info.status === "complete") {
+        settled = true;
+        chrome.tabs.onUpdated.removeListener(onUpd);
+        resolve(true);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(onUpd);
+    setTimeout(() => {
+      if (!settled) {
+        chrome.tabs.onUpdated.removeListener(onUpd);
+        resolve(false);
+      }
+    }, timeoutMs || 12000);
+  });
+}
+
+// 라이브러리(/videos) 탭 확보 — 열려 있으면 그 탭, 없으면 백그라운드로 새로 연다.
+// 작업 폴더 저장은 /videos 페이지에서 일어나므로 등록 대상 탭이 반드시 있어야 한다.
+async function ensureLibraryTab() {
+  const tabs = await chrome.tabs.query({ url: WEB_MATCHES });
+  if (tabs.length) return tabs[0].id;
+  const created = await new Promise((res) => chrome.tabs.create({ url: WEB_OPEN_URL, active: false }, res));
+  if (!created || created.id == null) return null;
+  await waitTabComplete(created.id, 12000);
+  await delay(1000); // React 마운트 + web-bridge 리스너 준비 여유
+  return created.id;
+}
+
 // 핸드셰이크: content script가 준비됐는지 ping → 없으면 강제 주입 → save 명령
 async function handshakeAndSave(tabId, requestId) {
   const ping = () =>
@@ -138,21 +175,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return false;
   }
 
-  // Douyin content → Web 탭으로 등록 payload 전달
+  // Douyin content → Web(/videos) 탭으로 등록 payload 전달.
+  // /videos가 닫혀 있으면 백그라운드로 자동으로 열어 작업 폴더 저장이 항상 일어나게 한다.
   if (msg && msg.type === "registerToWeb") {
     (async () => {
-      const tabs = await chrome.tabs.query({ url: WEB_MATCHES });
-      if (!tabs.length) {
+      const libTabId = await ensureLibraryTab();
+      if (libTabId == null) {
         sendResponse({ ok: false, reason: "web_closed" });
         return;
       }
       pendingDouyinTab = _sender && _sender.tab ? _sender.tab.id : null;
-      try {
-        await chrome.tabs.sendMessage(tabs[0].id, { type: "register", payload: msg.payload });
-        sendResponse({ ok: true, reason: "sent" });
-      } catch (e) {
-        sendResponse({ ok: false, reason: "bridge_error", error: String(e && e.message ? e.message : e) });
+      // 페이지 리스너가 아직 준비 전일 수 있어 짧게 재시도
+      let lastErr = null;
+      for (let i = 0; i < 3; i++) {
+        try {
+          await chrome.tabs.sendMessage(libTabId, { type: "register", payload: msg.payload });
+          sendResponse({ ok: true, reason: "sent" });
+          return;
+        } catch (e) {
+          lastErr = e;
+          await delay(700);
+        }
       }
+      sendResponse({ ok: false, reason: "bridge_error", error: String(lastErr && lastErr.message ? lastErr.message : lastErr) });
     })();
     return true;
   }
@@ -217,15 +262,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
       }
     })();
-    return true;
-  }
-
-  // 대안: 브라우저 다운로드 매니저로 직접 저장(세션/Referer를 브라우저가 처리)
-  if (msg && msg.type === "browserDownload") {
-    chrome.downloads.download(
-      { url: msg.url, filename: msg.filename || "clipminer-poc.mp4" },
-      (id) => sendResponse({ ok: !!id, id, error: chrome.runtime.lastError?.message }),
-    );
     return true;
   }
 });

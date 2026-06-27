@@ -59,34 +59,7 @@
   }
 
   let lastPayload = null;
-
-  function saveLocally(blob, name) {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.documentElement.appendChild(a);
-    a.click();
-    a.remove();
-  }
-  function webButtons() {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "margin-top:6px;display:flex;gap:6px";
-    const mk = (t, fn) => {
-      const b = document.createElement("button");
-      b.textContent = t;
-      b.style.cssText =
-        "background:#2B2F3A;color:#F5F7FA;border:0;border-radius:8px;padding:4px 10px;cursor:pointer";
-      b.onclick = fn;
-      return b;
-    };
-    wrap.appendChild(mk("라이브러리 열기", () => chrome.runtime.sendMessage({ type: "openWeb" })));
-    wrap.appendChild(
-      mk("다시 시도", () => {
-        if (lastPayload) chrome.runtime.sendMessage({ type: "registerToWeb", payload: lastPayload });
-      }),
-    );
-    panel().querySelector("#cmpoc-log").appendChild(wrap);
-  }
+  // 저장은 작업 폴더(File System Access)에만. 브라우저 다운로드(<a download>/chrome.downloads) 사용 안 함.
 
   // background ↔ content: 핸드셰이크(ping) / 저장 명령(save) / 등록 결과(registerResult)
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -336,21 +309,15 @@
       r = { ok: false, reason: "bridge_error", error: String(e) };
     }
 
+    // 저장은 작업 폴더(File System Access)에만 — 브라우저 다운로드 폴더 사용 금지.
     if (r && r.reason === "sent") {
       // 최종 결과는 registerResult 수신부에서 "저장 완료/실패"로 갱신
       setStatus("저장 중... 라이브러리에 추가하고 있어요.", "info");
-    } else if (r && r.reason === "web_closed") {
-      saveLocally(blob, payload.localFileName);
-      log("local save", true, payload.localFileName);
-      setStatus("라이브러리를 열어두면 자동으로 추가돼요.", "error");
-      reportSave("error", { error: "라이브러리(/videos)를 열어두세요" });
-      webButtons();
     } else {
-      saveLocally(blob, payload.localFileName);
-      log("local save", true, payload.localFileName);
-      setStatus("저장에 실패했어요. 다시 시도해주세요.", "error");
-      reportSave("error", { error: (r && r.error) || "전송 실패" });
-      webButtons();
+      setStatus("저장에 실패했어요. 잠시 후 다시 시도해주세요.", "error");
+      reportSave("error", {
+        error: (r && (r.error || r.reason)) || "라이브러리 연결 실패",
+      });
     }
   }
 

@@ -39,8 +39,10 @@
 - `content.js`: 페이지의 `_ROUTER_DATA`/`RENDER_DATA`/SSR 스크립트에서 `play_addr.url_list`(또는 .mp4 URL)와
   제목(desc/og:title)을 추출 → 후보 play URL 결정.
 - `background.js`: host_permissions로 cross-origin **세션 fetch**(페이지 CORS 우회) → ArrayBuffer 반환.
-  실패 시 대안으로 `chrome.downloads`로 직접 저장 시도.
-- `content.js`: 받은 바이트로 **Blob 생성** → `<a download>`로 mp4 저장.
+  `/videos`가 닫혀 있으면 백그라운드로 자동으로 열어 등록 대상 탭을 확보한다.
+- `content.js`: 받은 바이트로 mp4 payload 구성 → ClipMiner Web(`/videos`)으로 전달.
+  실제 mp4 파일은 **`/videos`의 작업 폴더(File System Access)** 에 저장된다.
+  브라우저 다운로드 폴더(`<a download>`/`chrome.downloads`)는 사용하지 않는다.
 
 ## v0.0.2 변경 (fetch 실패 대응)
 
