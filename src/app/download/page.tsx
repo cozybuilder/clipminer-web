@@ -429,13 +429,21 @@ export default function SavePage() {
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">6</span>
                   <p className="flex-1 text-sm text-text">압축을 푼 <b className="text-text">ClipMiner</b> 폴더를 선택합니다.</p>
                 </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">7</span>
+                  <p className="flex-1 text-sm text-text">홈페이지를 <b className="text-text">새로고침(F5)</b> 합니다.</p>
+                </div>
               </div>
 
               {/* 마무리 */}
               <div className="mt-4 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
-                <p className="text-sm font-semibold text-text">끝!</p>
+                <p className="text-sm font-semibold text-text">완료!</p>
                 <p className="mt-1 text-sm text-text">
                   이제부터는 영상 링크를 붙여넣고 <b className="text-primary">[영상 저장하기]</b>만 누르면 됩니다.
+                </p>
+                <p className="mt-2 text-xs text-subtext">
+                  새로고침 후 화면 상단에 <b className="text-primary">‘브라우저 준비 완료’</b>가 표시되면 설치가 정상적으로 완료된 것입니다.
                 </p>
               </div>
 
