@@ -268,6 +268,16 @@ export default function SavePage() {
           Douyin 영상 링크를 붙여넣고 저장하세요. 저장된 영상은 라이브러리에 자동으로 추가됩니다.
         </p>
 
+        {/* 로그인 필수 안내 (빨간색 강조) */}
+        <div className="mt-4 flex items-start gap-2 rounded-card border border-red-500/40 bg-red-500/10 px-4 py-3">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+          <p className="text-sm font-medium text-red-400">
+            Douyin 홈페이지에 로그인된 상태에서 사용해주세요.
+            <br />
+            <span className="font-normal">로그인하지 않으면 다른 영상이 저장될 수 있습니다.</span>
+          </p>
+        </div>
+
         {/* 메인 입력 */}
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <input
