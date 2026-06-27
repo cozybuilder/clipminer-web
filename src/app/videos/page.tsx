@@ -129,6 +129,13 @@ function formatDate(ms: number): string {
   });
 }
 
+// YYYY.MM.DD (다운로드 완료일 표기)
+function formatDateDot(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
+}
+
 function formatFileSize(bytes?: number): string {
   if (!bytes) return "";
   const units = ["B", "KB", "MB", "GB"];
@@ -1214,6 +1221,15 @@ function DetailModal({
 
   const needsRelink = !fileUrl && !!video.localFileName;
 
+  // 다운로드 관리 표시용 파생값
+  const fileExt = video.localFileName?.match(/\.[^.]+$/)?.[0] || ".mp4";
+  const displayFileName = `${(video.translatedTitle || video.title || "제목 없음").replace(/\.[^.]+$/, "")}${fileExt}`;
+  const originalFileName = video.localFileName || video.originalTitle || "—";
+  // 브라우저는 OS 폴더를 직접 열 수 없어, 저장된 영상을 새 탭에서 연다(웹 한계).
+  function openSavedVideo() {
+    if (fileUrl) window.open(fileUrl, "_blank", "noopener");
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -1366,36 +1382,77 @@ function DetailModal({
               </p>
             </div>
 
-            {/* 로컬 영상 */}
+            {/* 다운로드 관리 (예전 ClipMiner 스타일) */}
             <div className="rounded-card border border-border bg-background p-4">
-              <div className="mb-2 flex items-center gap-2">
-                <FileVideo size={14} className="text-subtext" />
-                <p className="text-xs text-subtext">로컬 영상</p>
+              <div className="mb-3 flex items-center gap-2">
+                <Download size={14} className="text-subtext" />
+                <p className="text-xs text-subtext">다운로드 관리</p>
               </div>
 
               {video.localFileName ? (
-                <div className="space-y-2">
-                  <p className="break-all font-mono text-sm text-text">
-                    {video.localFileName}
-                  </p>
-                  <p className="text-xs text-subtext">
-                    {video.localFileType || "video"}
-                    {video.localFileSize
-                      ? ` · ${formatFileSize(video.localFileSize)}`
-                      : ""}
-                  </p>
-                  {fileUrl ? (
-                    <p className="text-xs text-accent">
-                      저장된 영상은 왼쪽 미리보기에서 재생할 수 있습니다.
+                <div className="space-y-3">
+                  {/* 다운로드 완료일 */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-subtext">다운로드 완료</span>
+                    <span className="font-medium text-text">{formatDateDot(video.createdAt)}</span>
+                  </div>
+
+                  {/* 표시 파일명 */}
+                  <div>
+                    <p className="mb-1 text-xs text-subtext">표시 파일명</p>
+                    <p className="break-all rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-text">
+                      {displayFileName}
                     </p>
-                  ) : (
+                  </div>
+
+                  {/* 원본 파일명 */}
+                  <div>
+                    <p className="mb-1 text-xs text-subtext">원본 파일명</p>
+                    <p className="break-all rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-subtext">
+                      {originalFileName}
+                    </p>
+                  </div>
+
+                  {video.localFileSize ? (
+                    <p className="text-xs text-subtext/70">
+                      {video.localFileType || "video"} · {formatFileSize(video.localFileSize)}
+                    </p>
+                  ) : null}
+
+                  {needsRelink && (
                     <p className="text-xs text-amber-400">
-                      이 브라우저 세션에 파일 객체가 없습니다. 로컬 파일을 다시 연결하세요.
+                      이 브라우저 세션에 파일이 없습니다. ‘다시 연결’로 로컬 파일을 연결하세요.
                     </p>
                   )}
+
+                  {/* 액션 버튼 */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={openSavedVideo}
+                      disabled={!fileUrl}
+                      title={fileUrl ? "저장된 영상을 새 탭에서 엽니다" : "파일을 먼저 다시 연결하세요"}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FolderOpen size={13} /> 폴더 열기
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
+                    >
+                      <RotateCw size={12} /> 다시 연결
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-subtext/50">연결된 로컬 파일 없음</p>
+                <div className="space-y-3">
+                  <p className="text-sm text-subtext/50">다운로드된 파일이 없습니다.</p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
+                  >
+                    <Upload size={12} /> 로컬 파일 연결
+                  </button>
+                </div>
               )}
 
               <input
@@ -1405,13 +1462,6 @@ function DetailModal({
                 className="hidden"
                 onChange={onPickFile}
               />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-3 flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
-              >
-                {needsRelink ? <RotateCw size={12} /> : <Upload size={12} />}
-                {video.localFileName ? "다시 연결" : "로컬 파일 연결"}
-              </button>
             </div>
 
             {/* 태그 */}
