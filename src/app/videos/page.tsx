@@ -1161,6 +1161,20 @@ function DetailModal({
   const [titleDraft, setTitleDraft] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [showLocation, setShowLocation] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+
+  // 저장 위치 안내용: 연결된 작업 폴더 이름 (OS 전체 경로는 브라우저가 제공하지 않음)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const ws = await getStoredWorkspace().catch(() => null);
+      if (active) setWorkspaceName(ws?.name ?? null);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const bigTitle = video.translatedTitle || video.title || video.originalTitle || "(제목 없음)";
 
@@ -1225,10 +1239,6 @@ function DetailModal({
   const fileExt = video.localFileName?.match(/\.[^.]+$/)?.[0] || ".mp4";
   const displayFileName = `${(video.translatedTitle || video.title || "제목 없음").replace(/\.[^.]+$/, "")}${fileExt}`;
   const originalFileName = video.localFileName || video.originalTitle || "—";
-  // 브라우저는 OS 폴더를 직접 열 수 없어, 저장된 영상을 새 탭에서 연다(웹 한계).
-  function openSavedVideo() {
-    if (fileUrl) window.open(fileUrl, "_blank", "noopener");
-  }
 
   return (
     <div
@@ -1428,20 +1438,39 @@ function DetailModal({
                   {/* 액션 버튼 */}
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
-                      onClick={openSavedVideo}
-                      disabled={!fileUrl}
-                      title={fileUrl ? "저장된 영상을 새 탭에서 엽니다" : "파일을 먼저 다시 연결하세요"}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => setShowLocation((v) => !v)}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90"
                     >
-                      <FolderOpen size={13} /> 폴더 열기
+                      <FolderOpen size={13} /> 저장 위치 안내
                     </button>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
-                    >
-                      <RotateCw size={12} /> 다시 연결
-                    </button>
+                    {needsRelink && (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-text"
+                      >
+                        <RotateCw size={12} /> 다시 연결
+                      </button>
+                    )}
                   </div>
+
+                  {/* 저장 위치 안내 (OS 폴더 직접 열기는 브라우저 보안상 불가) */}
+                  {showLocation && (
+                    <div className="space-y-1.5 rounded-lg border border-border bg-card px-3 py-3 text-xs">
+                      <div className="flex gap-2">
+                        <span className="shrink-0 text-subtext">저장 폴더</span>
+                        <span className="break-all font-medium text-text">
+                          {workspaceName ? `${workspaceName} 폴더` : "연결한 작업 폴더"}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="shrink-0 text-subtext">파일명</span>
+                        <span className="break-all font-mono text-text">{video.localFileName}</span>
+                      </div>
+                      <p className="pt-1 text-subtext/80">
+                        브라우저 보안상 폴더를 자동으로 열 수 없습니다. 작업 폴더에서 위 파일명을 확인하세요.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
