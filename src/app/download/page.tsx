@@ -19,7 +19,6 @@ import {
   Package,
   Puzzle,
   Check,
-  X,
 } from "lucide-react";
 
 // 배포용 확장 ZIP (public/ 정적 파일 → npm run build:ext 로 생성)
@@ -381,7 +380,7 @@ export default function SavePage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-                  <p className="flex-1 text-sm text-text">작업 폴더를 선택합니다.</p>
+                  <p className="flex-1 text-sm text-text">작업 폴더 선택</p>
                   {!wsConnected ? (
                     <button
                       onClick={handleSelectFolder}
@@ -398,7 +397,7 @@ export default function SavePage() {
 
                 <div className="flex items-center gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
-                  <p className="flex-1 text-sm text-text"><b className="text-text">[확장 프로그램 다운로드]</b> 버튼을 누릅니다.</p>
+                  <p className="flex-1 text-sm text-text"><b className="text-text">[확장 프로그램 다운로드]</b></p>
                   <a
                     href={EXTENSION_ZIP_URL}
                     download
@@ -411,7 +410,7 @@ export default function SavePage() {
                 <div className="flex items-center gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">3</span>
                   <p className="flex-1 text-sm text-text">
-                    크롬 검색창에 입력합니다.{" "}
+                    크롬 주소창에 입력합니다.{" "}
                     <code className="rounded-md bg-background px-1.5 py-0.5 text-xs text-primary select-all">chrome://extensions</code>
                   </p>
                 </div>
@@ -447,9 +446,8 @@ export default function SavePage() {
                   <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Chrome</span>
                   <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Edge</span>
                   <span className="inline-flex items-center gap-1"><Check size={14} className="text-primary" /> Brave</span>
-                  <span className="inline-flex items-center gap-1 text-subtext"><X size={14} className="text-subtext/70" /> Safari</span>
-                  <span className="inline-flex items-center gap-1 text-subtext"><X size={14} className="text-subtext/70" /> Firefox</span>
                 </div>
+                <p className="mt-1.5 text-xs text-subtext">권장: Chrome 또는 Edge</p>
               </div>
 
               {/* 주의사항 */}
@@ -457,7 +455,7 @@ export default function SavePage() {
                 <p className="text-xs font-semibold text-subtext">주의사항</p>
                 <ul className="mt-2 space-y-1 text-sm text-subtext">
                   <li>처음 한 번만 설정하면 됩니다.</li>
-                  <li>영상은 작업 폴더에만 저장됩니다.</li>
+                  <li>영상은 선택한 작업 폴더에만 저장됩니다.</li>
                   <li>Chrome 또는 Edge 사용을 권장합니다.</li>
                 </ul>
                 {!supported && (
