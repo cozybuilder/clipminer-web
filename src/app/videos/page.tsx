@@ -66,6 +66,8 @@ import {
   queryWorkspacePermission,
   requestWorkspacePermission,
   readFileFromWorkspace,
+  ensureWritePermission,
+  deleteFileFromWorkspace,
   type Workspace,
 } from "@/lib/workspace";
 import {
@@ -349,8 +351,29 @@ export default function VideoLibraryPage() {
     setSelected(new Set());
   }
 
+  // 작업 폴더의 로컬 파일 1개 삭제 (best-effort — 실패해도 예외 없음, DB 삭제 흐름 보존)
+  async function tryDeleteWorkspaceFile(name?: string): Promise<boolean> {
+    if (!name) return false;
+    try {
+      const ws = await getStoredWorkspace();
+      if (!ws) return false;
+      const canWrite = await ensureWritePermission(ws.handle);
+      if (!canWrite) return false;
+      return await deleteFileFromWorkspace(ws.handle, name);
+    } catch {
+      return false;
+    }
+  }
+
   async function handleDelete(id: string) {
-    if (!window.confirm("이 영상을 삭제하시겠습니까?")) return;
+    const v = videos.find((x) => x.id === id);
+    const hasFile = !!v?.localFileName;
+    const msg = hasFile
+      ? "이 영상을 삭제할까요? 프로그램 목록과 연결된 로컬 영상 파일이 함께 삭제됩니다."
+      : "이 영상을 삭제할까요? 프로그램 목록에서 삭제됩니다.";
+    if (!window.confirm(msg)) return;
+    // 로컬 파일 먼저 삭제 시도(실패해도 계속). 그다음 DB 레코드 삭제.
+    if (v?.localFileName) await tryDeleteWorkspaceFile(v.localFileName);
     await deleteVideo(id);
     forgetFile(id);
     if (detailId === id) setDetailId(null);
@@ -473,9 +496,18 @@ export default function VideoLibraryPage() {
   }
   async function handleBulkDelete() {
     if (selected.size === 0) return;
-    if (!window.confirm(`선택한 영상 ${selected.size}개를 삭제하시겠습니까?`))
+    if (
+      !window.confirm(
+        `선택한 영상 ${selected.size}개를 삭제할까요? 프로그램 목록과 연결된 로컬 영상 파일이 함께 삭제됩니다.`,
+      )
+    )
       return;
     const ids = [...selected];
+    // 각 영상의 로컬 파일 삭제 시도(실패해도 계속). 그다음 DB 일괄 삭제.
+    for (const id of ids) {
+      const v = videos.find((x) => x.id === id);
+      if (v?.localFileName) await tryDeleteWorkspaceFile(v.localFileName);
+    }
     await bulkDelete(ids);
     ids.forEach(forgetFile);
     setSelected(new Set());

@@ -108,3 +108,23 @@ export async function readFileFromWorkspace(
     return null;
   }
 }
+
+/**
+ * 작업 폴더에서 파일 1개 삭제 (best-effort, 예외를 던지지 않음).
+ * 안전장치: name 은 연결된 폴더 바로 아래의 단일 파일명이어야 한다.
+ * 경로 구분자(/, \)가 있으면 거부 → 작업 폴더 밖/하위 경로 삭제 불가.
+ * removeEntry 는 recursive 미사용 → 폴더(디렉터리) 통째 삭제도 발생하지 않는다.
+ * @returns 삭제 성공 true / 실패(미존재·권한 없음·잘못된 이름) false
+ */
+export async function deleteFileFromWorkspace(
+  handle: FileSystemDirectoryHandle,
+  name: string,
+): Promise<boolean> {
+  if (!name || name.includes("/") || name.includes("\\")) return false;
+  try {
+    await handle.removeEntry(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
