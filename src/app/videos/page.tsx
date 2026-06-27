@@ -84,18 +84,33 @@ const STATUS_BADGE: Record<VideoStatus, string> = {
   done: "bg-primary/20 text-primary border-primary/40",
 };
 
-// Desktop 기본 추천 태그 (1차)
-const RECOMMENDED_TAGS = [
-  "수납",
-  "주방",
-  "욕실",
-  "생활용품",
-  "청소",
-  "아이디어",
-  "육아",
-  "캠핑",
-  "자동차",
+// Desktop 기본 추천 태그 (한국어 + 중국어 매핑).
+// 저장 형식은 "한국어/중국어" (예: "수납/收纳") — 한국어 의미 표시 + 중국 사이트 검색용 중국어를 함께 보관.
+const RECOMMENDED_TAGS: { ko: string; zh: string }[] = [
+  { ko: "수납", zh: "收纳" },
+  { ko: "주방", zh: "厨房" },
+  { ko: "욕실", zh: "浴室" },
+  { ko: "생활용품", zh: "生活用品" },
+  { ko: "청소", zh: "清洁" },
+  { ko: "아이디어", zh: "创意" },
+  { ko: "육아", zh: "育儿" },
+  { ko: "캠핑", zh: "露营" },
+  { ko: "자동차", zh: "汽车" },
 ];
+
+// 태그 문자열 "한국어/중국어" 를 분해. 중국어가 없으면 zh = null.
+function tagParts(tag: string): { ko: string; zh: string | null } {
+  const i = tag.indexOf("/");
+  if (i > 0 && i < tag.length - 1) {
+    return { ko: tag.slice(0, i), zh: tag.slice(i + 1) };
+  }
+  return { ko: tag, zh: null };
+}
+
+// 추천 태그 한 쌍의 저장 값 ("수납/收纳")
+function recTagValue(t: { ko: string; zh: string }): string {
+  return `${t.ko}/${t.zh}`;
+}
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 
@@ -623,7 +638,7 @@ export default function VideoLibraryPage() {
                     : "border-border bg-card text-subtext hover:text-text"
                 }`}
               >
-                #{name} <span className="opacity-60">{n}</span>
+                #{tagParts(name).ko} <span className="opacity-60">{n}</span>
               </button>
             ))}
           </div>
@@ -633,7 +648,7 @@ export default function VideoLibraryPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-subtext">
             {query ? `검색 결과 ${results.length}개` : `${activeLabel}영상 ${results.length}개`}
-            {tagFilter && <span className="text-primary"> · #{tagFilter}</span>}
+            {tagFilter && <span className="text-primary"> · #{tagParts(tagFilter).ko}</span>}
             {selected.size > 0 && (
               <span className="text-primary"> · {selected.size}개 선택</span>
             )}
@@ -1058,7 +1073,7 @@ function VideoCard({
                 }}
                 className="rounded bg-background px-1.5 py-0.5 text-xs text-subtext transition-colors hover:text-primary"
               >
-                #{t}
+                #{tagParts(t).ko}
               </button>
             ))}
           </div>
@@ -1161,6 +1176,13 @@ function DetailModal({
       video.tags.filter((t) => t !== tag),
     );
   }
+  // 태그 복사: 한국어+중국어를 함께 (예: "수납/收纳, 주방/厨房"). 중국어 없는 태그는 한국어만.
+  const tagsCopyText = video.tags
+    .map((t) => {
+      const { ko, zh } = tagParts(t);
+      return zh ? `${ko}/${zh}` : ko;
+    })
+    .join(", ");
 
   // 상세 모달이 열리면(로컬 파일 연결 시) 즉시 무음 자동 재생
   useEffect(() => {
@@ -1244,6 +1266,8 @@ function DetailModal({
                 loop
                 playsInline
                 controls
+                controlsList="nofullscreen nodownload noplaybackrate noremoteplayback"
+                disablePictureInPicture
                 className="h-full w-full object-contain"
               />
             ) : thumb ? (
@@ -1362,7 +1386,7 @@ function DetailModal({
                   </p>
                   {fileUrl ? (
                     <p className="text-xs text-accent">
-                      현재 세션에서 재생 중 — 위 미리보기에서 재생할 수 있습니다.
+                      저장된 영상은 왼쪽 미리보기에서 재생할 수 있습니다.
                     </p>
                   ) : (
                     <p className="text-xs text-amber-400">
@@ -1392,44 +1416,57 @@ function DetailModal({
 
             {/* 태그 */}
             <div className="rounded-card border border-border bg-background p-4">
-              <div className="mb-2 flex items-center gap-2">
-                <TagIcon size={14} className="text-subtext" />
-                <p className="text-xs text-subtext">태그</p>
-              </div>
-              {video.tags.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {video.tags.map((t) => (
-                    <span
-                      key={t}
-                      className="flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs text-primary"
-                    >
-                      #{t}
-                      <button
-                        onClick={() => removeTag(t)}
-                        className="opacity-60 hover:opacity-100"
-                        title="태그 제거"
-                      >
-                        <X size={11} />
-                      </button>
-                    </span>
-                  ))}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <TagIcon size={14} className="text-subtext" />
+                  <p className="text-xs text-subtext">태그</p>
                 </div>
-              ) : (
-                <p className="text-sm text-subtext/50">태그 없음</p>
+                {video.tags.length > 0 && (
+                  <CopyButton text={tagsCopyText} label="복사" />
+                )}
+              </div>
+              {video.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {video.tags.map((t) => {
+                    const { ko, zh } = tagParts(t);
+                    return (
+                      <span
+                        key={t}
+                        className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-primary"
+                      >
+                        <span className="leading-tight">
+                          <span className="block text-xs">#{ko}</span>
+                          {zh && <span className="block text-[10px] text-primary/70">{zh}</span>}
+                        </span>
+                        <button
+                          onClick={() => removeTag(t)}
+                          className="opacity-60 hover:opacity-100"
+                          title="태그 제거"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
               )}
 
-              {/* 추천 태그 (클릭 시 추가, 중복 제외) */}
-              {RECOMMENDED_TAGS.some((t) => !video.tags.includes(t)) && (
+              {/* 추천 태그 (한국어+중국어, 클릭 시 추가, 중복 제외) */}
+              {RECOMMENDED_TAGS.some((t) => !video.tags.includes(recTagValue(t))) && (
                 <div className="mt-3 border-t border-border/60 pt-3">
                   <p className="mb-1.5 text-xs text-subtext/70">추천 태그</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {RECOMMENDED_TAGS.filter((t) => !video.tags.includes(t)).map((t) => (
+                    {RECOMMENDED_TAGS.filter((t) => !video.tags.includes(recTagValue(t))).map((t) => (
                       <button
-                        key={t}
-                        onClick={() => addTag(t)}
-                        className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-subtext transition-colors hover:border-primary/50 hover:text-primary"
+                        key={t.ko}
+                        onClick={() => addTag(recTagValue(t))}
+                        className="flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-center leading-tight text-subtext transition-colors hover:border-primary/50 hover:text-primary"
                       >
-                        + {t}
+                        <span className="text-primary/60">+</span>
+                        <span>
+                          <span className="block text-xs">{t.ko}</span>
+                          <span className="block text-[10px] text-subtext/60">{t.zh}</span>
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -1662,6 +1699,8 @@ function AddVideoModal({
                   <video
                     src={previewUrl}
                     controls
+                    controlsList="nofullscreen nodownload noplaybackrate noremoteplayback"
+                    disablePictureInPicture
                     playsInline
                     className="max-h-64 w-full bg-black object-contain"
                   />
