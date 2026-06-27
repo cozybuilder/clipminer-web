@@ -15,7 +15,13 @@ import {
   Loader2,
   ChevronDown,
   ArrowRight,
+  Download,
+  Package,
+  Puzzle,
 } from "lucide-react";
+
+// 배포용 확장 ZIP (public/ 정적 파일 → npm run build:ext 로 생성)
+const EXTENSION_ZIP_URL = "/clipminer-extension.zip";
 import BackButton from "@/components/BackButton";
 import {
   isFsAccessSupported,
@@ -343,46 +349,126 @@ export default function SavePage() {
               <CheckCircle2 size={14} /> 브라우저 준비 완료
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-subtext">
-              <AlertCircle size={14} /> 브라우저 확장을 설치하세요
-            </span>
+            <button
+              onClick={() => setSetupOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-subtext transition-colors hover:border-primary/50 hover:text-text"
+            >
+              <Package size={14} /> ClipMiner 확장 설치 방법
+            </button>
           )}
         </div>
 
-        {/* 처음 한 번만 설정 (접기) */}
+        {/* 처음 한 번만 설정하면 됩니다 (설치 가이드) */}
         <div className="mt-8 rounded-card border border-border bg-card">
           <button
             onClick={() => setSetupOpen((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-text"
+            className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-text"
           >
-            <span>처음 한 번만 설정하세요</span>
+            <span className="flex items-center gap-2">
+              <Puzzle size={16} className="text-primary" /> 처음 한 번만 설정하면 됩니다
+            </span>
             <ChevronDown
               size={16}
               className={`text-subtext transition-transform ${setupOpen ? "rotate-180" : ""}`}
             />
           </button>
+
           {setupOpen && (
-            <div className="border-t border-border px-4 py-4">
-              <ol className="space-y-2 text-sm text-subtext">
-                <li className="flex items-center justify-between gap-2">
-                  <span>1. 영상을 저장할 <b className="text-text">작업 폴더</b>를 선택합니다.</span>
-                  {!wsConnected && (
+            <div className="space-y-5 border-t border-border px-4 py-5">
+              {/* STEP 1 — 작업 폴더 */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  1
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text">영상을 저장할 폴더를 선택합니다.</p>
+                  <p className="mt-0.5 text-xs text-subtext">저장된 영상이 이 폴더에 모입니다.</p>
+                  {!wsConnected ? (
                     <button
                       onClick={handleSelectFolder}
-                      className="shrink-0 rounded-lg bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
                     >
-                      폴더 선택
+                      <FolderOpen size={13} /> 작업 폴더 선택
                     </button>
+                  ) : (
+                    <span className="mt-2 inline-flex items-center gap-1 text-xs text-primary">
+                      <CheckCircle2 size={13} /> 폴더 연결됨
+                    </span>
                   )}
-                </li>
-                <li>2. <b className="text-text">ClipMiner 브라우저 확장</b>을 설치합니다.</li>
-                <li>3. 영상 <b className="text-text">링크를 붙여넣고</b> 저장하면 됩니다.</li>
-              </ol>
-              <p className="mt-3 text-xs text-subtext/60">
-                이후에는 링크를 붙여넣고 <b>영상 저장하기</b>만 누르면 됩니다.
-              </p>
+                </div>
+              </div>
+
+              {/* STEP 2 — ZIP 다운로드 */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  2
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text">ClipMiner 확장 ZIP 파일을 받습니다.</p>
+                  <p className="mt-0.5 text-xs text-subtext">받은 ZIP을 압축 해제하면 <b className="text-text">ClipMiner</b> 폴더가 생깁니다.</p>
+                  <a
+                    href={EXTENSION_ZIP_URL}
+                    download
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
+                  >
+                    <Download size={13} /> 확장 ZIP 다운로드
+                  </a>
+                </div>
+              </div>
+
+              {/* STEP 3 — chrome://extensions */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  3
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text">Chrome 주소창에 입력해 확장 관리 화면을 엽니다.</p>
+                  <code className="mt-1.5 inline-block rounded-md bg-background px-2 py-1 text-xs text-primary select-all">
+                    chrome://extensions
+                  </code>
+                </div>
+              </div>
+
+              {/* STEP 4 — 개발자 모드 */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  4
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text">우측 상단의 <b className="text-text">개발자 모드</b>를 켭니다.</p>
+                </div>
+              </div>
+
+              {/* STEP 5 — 압축해제된 확장 로드 */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  5
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text"><b className="text-text">[압축해제된 확장 프로그램을 로드합니다]</b> 버튼을 누릅니다.</p>
+                </div>
+              </div>
+
+              {/* STEP 6 — 폴더 선택 */}
+              <div className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  6
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text">압축을 해제한 <b className="text-text">ClipMiner</b> 폴더를 선택합니다.</p>
+                  <p className="mt-0.5 text-xs text-subtext">화면 상단에 <b className="text-text">브라우저 준비 완료</b>가 뜨면 설치 완료입니다.</p>
+                </div>
+              </div>
+
+              {/* 마무리 강조 */}
+              <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                <p className="text-sm font-medium text-text">
+                  설치 후에는 영상 링크를 붙여넣고 <b className="text-primary">영상 저장하기</b> 버튼만 누르면 자동으로 저장됩니다.
+                </p>
+              </div>
+
               {!supported && (
-                <p className="mt-2 text-xs text-amber-400">
+                <p className="text-xs text-amber-400">
                   이 브라우저는 폴더 저장을 지원하지 않습니다. Chrome·Edge를 사용하세요.
                 </p>
               )}

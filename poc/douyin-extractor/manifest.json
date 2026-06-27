@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ClipMiner PoC — Douyin Extractor",
+  "name": "ClipMiner",
   "version": "0.1.0",
-  "description": "Douyin 영상 → mp4 → ClipMiner Web 작업 폴더 저장 + 라이브러리 자동 등록. 로컬 unpacked, Chrome.",
+  "description": "영상 링크를 붙여넣으면 작업 폴더에 저장하고 라이브러리에 자동으로 등록합니다.",
   "permissions": ["tabs", "scripting"],
   "host_permissions": ["https://*/*"],
   "background": { "service_worker": "background.js" },

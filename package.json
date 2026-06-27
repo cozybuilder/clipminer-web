@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:ext": "powershell -ExecutionPolicy Bypass -File poc/make-extension-zip.ps1"
   },
   "dependencies": {
     "dexie": "^4.4.4",
