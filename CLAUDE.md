@@ -69,10 +69,16 @@ Claude Code가 이 저장소에서 작업할 때 따르는 지침.
 
 | 문서 | 용도 |
 | --- | --- |
-| [docs/DESIGN.md](docs/DESIGN.md) | 설계 · 결정사항 A~H 매핑 |
-| [docs/DB.md](docs/DB.md) | DB 스키마 설계 |
-| [docs/STATUS.md](docs/STATUS.md) | 진행 상태 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 단계별 계획 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 제품·아키텍처 결정 · 결정사항 A~H 매핑 · 콘텐츠 이용 원칙 |
+| [docs/DB.md](docs/DB.md) | 실제 저장 구조 (IndexedDB/Dexie 스토어 · 스키마 v1~v6) |
+| [docs/STATUS.md](docs/STATUS.md) | 현재 살아있는 진행 상태 · 다음 작업 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 단계별 계획 (Phase 0~8 완료 · 이후 후보) |
+| [docs/BROWSER_CONNECTOR.md](docs/BROWSER_CONNECTOR.md) | 브라우저 확장 기반 수집 구조 (현재 구현) |
+| [docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md](docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md) | 다운로드 아키텍처 옵션 검토 (결정 근거) |
+
+> 문서 역할 분리: README=진입 요약 · STATUS=현재 상태 · ROADMAP=단계 계획 ·
+> DESIGN=결정 · DB=저장 구조 · BROWSER_CONNECTOR=확장/수집. 같은 사실을 중복 서술하지 않는다.
+> 오래된 결정은 삭제하지 말고 각 문서의 "폐기된 결정 / Superseded" 섹션으로 이동한다.
 
 작업으로 사실이 바뀌면 해당 문서(특히 STATUS.md)를 갱신한다.
 

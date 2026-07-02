@@ -56,22 +56,28 @@ clipminer-web/
 └─ package.json
 ```
 
-## 현재 구현 상태
+## 현재 구현 상태 (Phase 8)
 
-- ✅ Next.js 앱 골격 / 기본 홈 페이지
-- ⬜ IndexedDB(Dexie) 메타데이터 저장 (미구현)
-- ⬜ 로컬 폴더 영상 파일 저장 (미구현)
-- ⬜ 영상 등록·목록·태그·메모·제작 상태 기능 (미구현)
+- ✅ Next.js 앱 골격 / 홈 / `/videos` 라이브러리 / `/download` 콘텐츠 저장 화면
+- ✅ IndexedDB(Dexie) 메타데이터 저장 — `videos` / `tags` / `settings` 스토어 (스키마 v6)
+- ✅ 로컬 폴더 영상 파일 저장 — File System Access API 작업 폴더
+- ✅ 영상 등록·목록·태그·메모·제작 상태·즐겨찾기·다중선택·일괄작업
+- ✅ 카드/상세 Desktop 보드형 UI (hover 무음 재생, 이중 제목, 추천 태그 한/중)
+- ✅ Douyin 수집: 브라우저 확장이 영상 추출 → `/download`가 작업 폴더 저장 + 자동 등록
+- ✅ 삭제 시 로컬 파일 동반 삭제(확인창), 영상 ID 기준 중복 판정
 - ⛔ 외부 DB / 인증 / 세션 — MVP 제외
+- ⛔ 서버 다운로드(yt-dlp/cookies.txt/api) — 미채택 (`reference/`로 분리)
+
+> 세부 진행 상태는 [docs/STATUS.md](docs/STATUS.md) 기준.
 
 ---
 
 ## 배포 (Vercel)
 
-> **상태:** Phase 2 — 배포 준비 완료(코드/설정 점검 통과). 실제 Vercel 연결·배포는 사장 승인 후 진행.
+> **상태:** 배포 준비 완료(코드/설정 점검 통과, lint/build 통과). 실제 Vercel 연결·배포는 사장 승인 후 진행.
 
 표준 Next.js 16 프로젝트이므로 Vercel이 프레임워크를 자동 감지한다. **MVP는 Local-First라
-서버 환경변수/비밀키가 필요 없다.**
+서버 환경변수/비밀키가 필요 없다. 서버 다운로드 연산이 없어 운영비 0원.**
 
 ### Vercel 프로젝트 설정값
 | 항목 | 값 |
@@ -98,8 +104,8 @@ clipminer-web/
   실제 영상 파일은 **사용자 PC의 지정 폴더**에 저장한다.
 - **서버 역할:** 서버는 앱만 제공하고 사용자 데이터를 보관하지 않는다.
 - **인증 없음:** MVP는 로그인/세션 없이 단일 로컬 사용자로 동작한다.
-- **데이터 모델:** 영상을 중심으로, 태그는 레코드의 배열 필드로 저장한다.
-- **제목:** 자동 변환 없이 사용자가 직접 입력한다.
+- **데이터 모델:** 영상을 중심으로, 태그는 영상 레코드의 배열 필드로 저장하고 별도 `tags` 카탈로그 스토어에도 이름을 보장한다.
+- **제목:** 사용자가 직접 입력·수정한다. Douyin 수집 시에는 원문(originalTitle)과 번역(translatedTitle, Desktop titleTranslate 사전 기반)을 자동으로 채운다.
 - **동기화:** 멀티 기기 동기화는 MVP에 없으며, Backup/Sync는 이후 선택적 기능으로 검토한다.
 
 ---
@@ -108,10 +114,12 @@ clipminer-web/
 
 | 문서 | 내용 |
 | --- | --- |
-| [docs/DESIGN.md](docs/DESIGN.md) | 시스템 설계 · Local-First 저장 전략 · 아키텍처 결정 |
-| [docs/DB.md](docs/DB.md) | 데이터 저장 설계 (IndexedDB/Dexie 스토어 · 로컬 파일) |
-| [docs/STATUS.md](docs/STATUS.md) | 현재 진행 상태 · 완료/미완료 항목 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase 0~1.5 완료 · Phase 2(Vercel)~ 이후 계획 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 제품·아키텍처 결정 · Local-First 저장 전략 · 콘텐츠 이용 원칙 |
+| [docs/DB.md](docs/DB.md) | 실제 저장 구조 (IndexedDB/Dexie 스토어·스키마 v1~v6 · 로컬 파일) |
+| [docs/STATUS.md](docs/STATUS.md) | 현재 살아있는 진행 상태 · 다음 작업 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 단계별 계획 (Phase 0~8 완료 · 이후 후보) |
+| [docs/BROWSER_CONNECTOR.md](docs/BROWSER_CONNECTOR.md) | 브라우저 확장 기반 수집 구조 (현재 구현) |
+| [docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md](docs/DOWNLOAD_ARCHITECTURE_OPTIONS.md) | 다운로드 아키텍처 옵션 검토 (결정 근거) |
 | [CLAUDE.md](CLAUDE.md) | Claude Code 작업 가이드라인 · 제약 |
 
 ---
@@ -119,15 +127,16 @@ clipminer-web/
 ## MVP 범위 (요약)
 
 **포함**
-- 로컬 폴더 지정 (영상 파일 저장 위치)
-- 영상 등록 (URL/출처 + 사용자 직접 제목 + 태그 + 메모 + 제작 상태)
+- 로컬 폴더 지정 (영상 파일 저장 위치, File System Access)
+- 브라우저 확장 기반 Douyin 수집 → 작업 폴더 저장 + 라이브러리 자동 등록
+- 영상 등록 (URL/출처 + 제목 + 태그 + 메모 + 제작 상태), 로컬 파일 첨부
 - 메타데이터를 IndexedDB(Dexie)에 저장
-- 영상 목록/조회/수정/삭제, 태그 필터(기본)
+- 영상 목록/조회/수정/삭제(로컬 파일 동반 삭제)/즐겨찾기/다중선택·일괄작업, 태그 필터·검색
 
 **제외**
 - 외부 DB(Supabase 등) / 인증 / 세션(`cm_session`)
 - 서버 측 사용자 데이터 보관 / RLS
-- 제목 자동 변환
+- 서버 다운로드(yt-dlp/cookies.txt/`/api/download`) — 미채택
 - 멀티 기기 동기화 (이후 선택적 Backup/Sync로 검토)
 - 별도 Settings/Profile 화면
 
